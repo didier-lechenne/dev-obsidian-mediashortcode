@@ -1,0 +1,2 @@
+# dev-obsidian-mediashortcode
+dev
