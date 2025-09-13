@@ -25,26 +25,26 @@ export default class ImageCaptions extends Plugin {
             .forEach(async imageEmbedContainer => {
               const img = imageEmbedContainer.querySelector('img, video')
               const width = imageEmbedContainer.getAttribute('width') || ''
-              const captionText = this.getCaptionText(imageEmbedContainer)
+              const parsedData = this.parseImageData(imageEmbedContainer)
               if (!img) return
               const figure = imageEmbedContainer.querySelector('figure')
               const figCaption = imageEmbedContainer.querySelector('figcaption')
               if (figure || img.parentElement?.nodeName === 'FIGURE') {
                 // Node has already been processed
                 // Check if the text needs to be updated
-                if (figCaption && captionText) {
+                if (figCaption && parsedData.caption) {
                   // Update the text in the existing element
-                  const children = await renderMarkdown(captionText, '', this) ?? [captionText]
+                  const children = await renderMarkdown(parsedData.caption, '', this) ?? [parsedData.caption]
                   figCaption.replaceChildren(...children)
-                } else if (!captionText) {
+                } else if (!parsedData.caption) {
                   // The alt-text has been removed, so remove the custom <figure> element
                   // and set it back to how it was originally with just the plain <img> element
                   imageEmbedContainer.appendChild(img)
                   figure?.remove()
                 }
               } else {
-                if (captionText && captionText !== imageEmbedContainer.getAttribute('src')) {
-                  await this.insertFigureWithCaption(img as HTMLElement, imageEmbedContainer, captionText, '')
+                if (parsedData.caption && parsedData.caption !== imageEmbedContainer.getAttribute('src')) {
+                  await this.insertFigureWithCaption(img as HTMLElement, imageEmbedContainer, parsedData, '')
                 }
               }
               if (width) {
@@ -65,6 +65,105 @@ export default class ImageCaptions extends Plugin {
   }
 
   /**
+   * Parse image data from alt attribute
+   */
+  parseImageData(img: HTMLElement | Element) {
+    let altText = img.getAttribute('alt') || ''
+    const src = img.getAttribute('src') || ''
+    
+    // Check if it's the default Obsidian behavior
+    const edge = altText.replace(/ > /, '#')
+    if (altText === src || edge === src) {
+      return { caption: '', dataNom: 'image', id: this.generateSlug(src) }
+    }
+
+    // Split by pipe
+    const parts = altText.split('|').map(part => part.trim())
+    
+    const result = {
+      dataNom: 'image',
+      caption: '',
+      width: undefined as string | undefined,
+      printwidth: undefined as string | undefined,
+      col: undefined as string | undefined,
+      printcol: undefined as string | undefined,
+      class: [] as string[],
+      poster: undefined as string | undefined,
+      imgX: undefined as string | undefined,
+      imgY: undefined as string | undefined,
+      imgW: undefined as string | undefined,
+      id: this.generateSlug(src)
+    }
+
+    // New syntax: first part is data-nom
+    if (parts.length > 1 && ['imagenote', 'image', 'imageGrid', 'figure', 'video'].includes(parts[0])) {
+      result.dataNom = parts[0]
+      
+      // Parse remaining parts as key:value
+      for (let i = 1; i < parts.length; i++) {
+        const part = parts[i]
+        
+        if (part.includes(':')) {
+          const [key, ...valueParts] = part.split(':')
+          const value = valueParts.join(':').trim()
+          
+          switch (key.toLowerCase()) {
+            case 'caption': result.caption = value; break
+            case 'width': result.width = value; break
+            case 'printwidth': result.printwidth = value; break
+            case 'col': result.col = value; break
+            case 'printcol': result.printcol = value; break
+            case 'class': result.class = value.split(',').map(c => c.trim()); break
+            case 'poster': result.poster = value; break
+            case 'imgx': result.imgX = value; break
+            case 'imgy': result.imgY = value; break
+            case 'imgw': result.imgW = value; break
+            case 'id': result.id = value; break
+          }
+        }
+      }
+    } else {
+      // Old syntax: first part is caption
+      result.caption = parts[0]
+    }
+
+    // Apply existing logic
+    if (this.settings.captionRegex && result.caption) {
+      try {
+        const match = result.caption.match(new RegExp(this.settings.captionRegex))
+        result.caption = match?.[1] || ''
+      } catch (e) {}
+    }
+
+    if (result.caption === filenamePlaceholder) {
+      const match = src.match(/[^\\/]+(?=\.\w+$)|[^\\/]+$/)
+      result.caption = match?.[0] || ''
+    } else if (result.caption === filenameExtensionPlaceholder) {
+      const match = src.match(/[^\\/]+$/)
+      result.caption = match?.[0] || ''
+    } else if (result.caption === '\\' + filenamePlaceholder) {
+      result.caption = filenamePlaceholder
+    }
+
+    result.caption = result.caption.replace(/<<(.*?)>>/g, (_, linktext) => '[[' + linktext + ']]')
+
+    return result
+  }
+
+  /**
+   * Generate a slug from image src
+   */
+  generateSlug(src: string): string {
+    const filename = src.split('/').pop() || src
+    const nameWithoutExt = filename.replace(/\.[^.]+$/, '')
+    return nameWithoutExt
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '')
+  }
+
+  /**
    * Process an HTMLElement or Element to extract the caption text
    * from the alt attribute.
    *
@@ -73,51 +172,8 @@ export default class ImageCaptions extends Plugin {
    * @param img
    */
   getCaptionText (img: HTMLElement | Element) {
-    let captionText = img.getAttribute('alt') || ''
-    const src = img.getAttribute('src') || ''
-    // If a wikilink is in the format [[image.png#foo]], Obsidian changes the captionText
-    // to be 'image.png > foo'. We need to test for this edge case also.
-    const edge = captionText.replace(/ > /, '#')
-    if (captionText === src || edge === src) {
-      // If no caption is specified then Obsidian puts the src in the alt attribute,
-      // so we need to set a blank caption.
-      return ''
-    }
-
-    // Perform the regex, if any
-    if (this.settings.captionRegex) {
-      try {
-        const match = captionText.match(new RegExp(this.settings.captionRegex))
-        if (match && match[1]) {
-          captionText = match[1]
-        } else {
-          captionText = ''
-        }
-      } catch (e) {
-        // Invalid regex
-      }
-    }
-
-    if (captionText === filenamePlaceholder) {
-      // Optionally use filename as caption text if the placeholder is used
-      const match = src.match(/[^\\/]+(?=\.\w+$)|[^\\/]+$/)
-      if (match?.[0]) {
-        captionText = match[0]
-      }
-    } else if (captionText === filenameExtensionPlaceholder) {
-      // Optionally use filename (including extension) as caption text if the placeholder is used
-      const match = src.match(/[^\\/]+$/)
-      if (match?.[0]) {
-        captionText = match[0]
-      }
-    } else if (captionText === '\\' + filenamePlaceholder) {
-      // Remove the escaping to allow the placeholder to be used verbatim
-      captionText = filenamePlaceholder
-    }
-    captionText = captionText.replace(/<<(.*?)>>/g, (_, linktext) => {
-      return '[[' + linktext + ']]'
-    })
-    return captionText
+    const parsedData = this.parseImageData(img)
+    return parsedData.caption
   }
 
   /**
@@ -127,36 +183,158 @@ export default class ImageCaptions extends Plugin {
     return (el, ctx) => {
       el.findAll('img:not(.emoji), video')
         .forEach(async img => {
-          const captionText = this.getCaptionText(img)
+          const parsedData = this.parseImageData(img)
           const parent = img.parentElement
-          if (parent && parent?.nodeName !== 'FIGURE' && captionText && captionText !== img.getAttribute('src')) {
-            await this.insertFigureWithCaption(img, parent, captionText, ctx.sourcePath)
+          if (parent && parent?.nodeName !== 'FIGURE' && parsedData.caption && parsedData.caption !== img.getAttribute('src')) {
+            await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath)
           }
         })
     }
   }
 
   /**
-   * Replace the original <img> element with this structure:
-   * @example
-   * <figure>
-   *   <img>
-   *   <figcaption>The caption text</figcaption>
-   * </figure>
-   *
-   * @param {HTMLElement} imageEl - The original image element to insert inside the <figure>
-   * @param {HTMLElement|Element} outerEl - Most likely the parent of the original <img>
-   * @param captionText
-   * @param sourcePath
+   * Replace the original <img> element with appropriate structure
    */
-  async insertFigureWithCaption (imageEl: HTMLElement, outerEl: HTMLElement | Element, captionText: string, sourcePath: string) {
-    const figure = outerEl.createEl('figure')
-    figure.addClass('mediashortcode-figure')
-    figure.appendChild(imageEl)
-    const children = await renderMarkdown(captionText, sourcePath, this) ?? [captionText]
-    figure.createEl('figcaption', {
-      cls: 'mediashortcode-caption'
-    }).replaceChildren(...children)
+  async insertFigureWithCaption (imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
+    let container: HTMLElement
+    
+    if (parsedData.dataNom === 'imagenote') {
+      // Special structure for imagenote
+      container = outerEl.createEl('span')
+      container.addClass('imagenote')
+      container.setAttribute('id', parsedData.id)
+      container.setAttribute('data-src', imageEl.getAttribute('src') || '')
+      
+      // Add custom classes
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      container.appendChild(imageEl)
+      
+      if (parsedData.caption) {
+        const captionSpan = container.createEl('span', { cls: 'caption' })
+        const children = await renderMarkdown(parsedData.caption, sourcePath, this) ?? [parsedData.caption]
+        captionSpan.replaceChildren(...children)
+      }
+    } else if (parsedData.dataNom === 'video') {
+      // Special structure for video
+      container = outerEl.createEl('figure')
+      container.addClass('videofigure')
+      container.setAttribute('data-src', imageEl.getAttribute('src') || '')
+      
+      // Add custom classes and styles
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      const style: string[] = []
+      if (parsedData.width) style.push(`--width: ${parsedData.width}px`)
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}px`)
+      if (parsedData.col) style.push(`--columns: ${parsedData.col}`)
+      if (parsedData.printcol) style.push(`--print-columns: ${parsedData.printcol}`)
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}px`)
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}px`)
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}px`)
+      
+      if (style.length > 0) {
+        container.setAttribute('style', style.join('; '))
+      }
+      
+      // Create video wrapper div
+      const videoDiv = container.createEl('div', { cls: 'video' })
+      if (parsedData.poster) {
+        videoDiv.setAttribute('style', `background-image: url(${parsedData.poster})`)
+      }
+      
+      // Handle video content (YouTube/Vimeo or regular video)
+      const src = imageEl.getAttribute('src') || ''
+      const videoContent = this.createVideoContent(src)
+      if (videoContent) {
+        videoDiv.innerHTML = videoContent
+      } else {
+        videoDiv.appendChild(imageEl)
+      }
+      
+      if (parsedData.caption) {
+        const children = await renderMarkdown(parsedData.caption, sourcePath, this) ?? [parsedData.caption]
+        container.createEl('figcaption', {
+          cls: 'figcaption'
+        }).replaceChildren(...children)
+      }
+    } else {
+      // Standard figure structure for other types
+      container = outerEl.createEl('figure')
+      container.addClass('mediashortcode-figure')
+      container.setAttribute('data-nom', parsedData.dataNom)
+      container.setAttribute('id', parsedData.id)
+      
+      // Add custom classes
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      // Set CSS custom properties
+      const style: string[] = []
+      if (parsedData.width) style.push(`--width: ${parsedData.width}px`)
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}px`)
+      if (parsedData.col) style.push(`--columns: ${parsedData.col}`)
+      if (parsedData.printcol) style.push(`--print-columns: ${parsedData.printcol}`)
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}px`)
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}px`)
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}px`)
+      
+      if (style.length > 0) {
+        container.setAttribute('style', style.join('; '))
+      }
+      
+      // Add poster attribute for videos
+      if (parsedData.poster && imageEl.tagName.toLowerCase() === 'video') {
+        imageEl.setAttribute('poster', parsedData.poster)
+      }
+      
+      container.appendChild(imageEl)
+      
+      if (parsedData.caption) {
+        const children = await renderMarkdown(parsedData.caption, sourcePath, this) ?? [parsedData.caption]
+        container.createEl('figcaption', {
+          cls: 'mediashortcode-caption'
+        }).replaceChildren(...children)
+      }
+    }
+  }
+
+  /**
+   * Create video content for YouTube/Vimeo URLs
+   */
+  createVideoContent(url: string): string | null {
+    if (url.includes('yout')) {
+      return this.createYouTubeEmbed(url)
+    }
+    if (url.includes('vimeo')) {
+      return this.createVimeoEmbed(url)
+    }
+    return null
+  }
+
+  createYouTubeEmbed(url: string): string | null {
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/)
+    if (!match) return null
+    
+    const videoId = match[1]
+    const src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`
+    
+    return `<youtube-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></youtube-embed>`
+  }
+
+  createVimeoEmbed(url: string): string | null {
+    const match = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/)
+    if (!match) return null
+    
+    const videoId = match[1]
+    const src = `https://player.vimeo.com/video/${videoId}?autoplay=1&rel=0`
+    
+    return `<vimeo-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></vimeo-embed>`
   }
 
   async loadSettings () {
