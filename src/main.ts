@@ -151,11 +151,11 @@ export default class ImageCaptions extends Plugin {
    */
   async insertFigureWithCaption (imageEl: HTMLElement, outerEl: HTMLElement | Element, captionText: string, sourcePath: string) {
     const figure = outerEl.createEl('figure')
-    figure.addClass('image-captions-figure')
+    figure.addClass('mediashortcode-figure')
     figure.appendChild(imageEl)
     const children = await renderMarkdown(captionText, sourcePath, this) ?? [captionText]
     figure.createEl('figcaption', {
-      cls: 'image-captions-caption'
+      cls: 'mediashortcode-caption'
     }).replaceChildren(...children)
   }
 

@@ -1,11 +1,11 @@
-.image-captions-figure {
+.mediashortcode-figure {
     margin: 0;
     padding: 2px;
     display: table; /* To allow for correct caption text wrapping */
     border-radius: 2px;
 }
 
-.image-captions-caption {
+.mediashortcode-caption {
     margin: -5px 0 0 0;
     padding: 3px 5px;
     text-align: center;
@@ -13,12 +13,12 @@
     caption-side: bottom;
 }
 
-.theme-dark .image-captions-figure,
-.theme-dark .image-captions-caption {
+.theme-dark .mediashortcode-figure,
+.theme-dark .mediashortcode-caption {
     background: #303030;
 }
 
-.theme-light .image-captions-figure,
-.theme-light .image-captions-caption {
+.theme-light .mediashortcode-figure,
+.theme-light .mediashortcode-caption {
     background: #ebebeb;
 }

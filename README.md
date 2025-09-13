@@ -1,4 +1,4 @@
-![](https://img.shields.io/github/license/alangrainger/obsidian-image-captions) ![](https://img.shields.io/github/v/release/alangrainger/obsidian-image-captions?style=flat-square) ![](https://img.shields.io/github/downloads/alangrainger/obsidian-image-captions/total)
+![](https://img.shields.io/github/license/alangrainger/obsidian-mediashortcode) ![](https://img.shields.io/github/v/release/alangrainger/obsidian-mediashortcode?style=flat-square) ![](https://img.shields.io/github/downloads/alangrainger/obsidian-mediashortcode/total)
 
 # Add image captions
 
@@ -90,7 +90,7 @@ If you want to keep escaped pipes `\|` (in case you are using internal links), u
 
 ## Styling
 
-You can apply CSS styling by targeting the `.image-captions-figure` and `.image-captions-caption` classes.
+You can apply CSS styling by targeting the `.mediashortcode-figure` and `.mediashortcode-caption` classes.
 
 ## Limitations
 
