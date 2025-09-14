@@ -64,9 +64,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     this.observer = new MutationObserver((mutations) => {
       mutations.forEach((rec) => {
         if (rec.type === "childList") {
-          const container = rec.target;
-          this.groupConsecutiveImageEmbeds(container);
-          container.querySelectorAll(".image-embed, .video-embed").forEach(async (imageEmbedContainer) => {
+          rec.target.querySelectorAll(".image-embed, .video-embed").forEach(async (imageEmbedContainer) => {
             var _a, _b;
             const img = imageEmbedContainer.querySelector("img, video");
             const width = imageEmbedContainer.getAttribute("width") || "";

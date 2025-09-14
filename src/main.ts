@@ -19,13 +19,9 @@ export default class ImageCaptions extends Plugin {
     this.observer = new MutationObserver((mutations: MutationRecord[]) => {
       mutations.forEach((rec: MutationRecord) => {
         if (rec.type === 'childList') {
-          const container = rec.target as Element;
-          
-          // Grouper les image-embed consécutifs AVANT de les traiter
-          this.groupConsecutiveImageEmbeds(container);
-          
-          // Traiter normalement les image-embed restants
-          container.querySelectorAll('.image-embed, .video-embed')
+          (<Element>rec.target)
+            // Search for all .image-embed nodes. Could be <div> or <span>
+            .querySelectorAll('.image-embed, .video-embed')
             .forEach(async imageEmbedContainer => {
               const img = imageEmbedContainer.querySelector('img, video')
               const width = imageEmbedContainer.getAttribute('width') || ''
