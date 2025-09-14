@@ -69,6 +69,9 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
             const img = imageEmbedContainer.querySelector("img, video");
             const width = imageEmbedContainer.getAttribute("width") || "";
             const parsedData = this.parseImageData(imageEmbedContainer);
+            if (parsedData.caption) {
+              imageEmbedContainer.setAttribute("alt", parsedData.caption);
+            }
             if (!img) return;
             const figure = imageEmbedContainer.querySelector("figure");
             const figCaption = imageEmbedContainer.querySelector("figcaption");

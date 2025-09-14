@@ -23,9 +23,17 @@ export default class ImageCaptions extends Plugin {
             // Search for all .image-embed nodes. Could be <div> or <span>
             .querySelectorAll('.image-embed, .video-embed')
             .forEach(async imageEmbedContainer => {
+              
+
+
               const img = imageEmbedContainer.querySelector('img, video')
               const width = imageEmbedContainer.getAttribute('width') || ''
               const parsedData = this.parseImageData(imageEmbedContainer)
+
+              if (parsedData.caption) {
+                imageEmbedContainer.setAttribute('alt', parsedData.caption);
+              }
+              
               if (!img) return
               const figure = imageEmbedContainer.querySelector('figure')
               const figCaption = imageEmbedContainer.querySelector('figcaption')
