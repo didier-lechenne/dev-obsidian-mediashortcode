@@ -132,10 +132,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     if (!match) return;
     const imagePath = match[1];
     const params = match[3] || "";
-    const file = this.app.vault.getAbstractFileByPath(imagePath);
-    if (!file) return;
     const img = container.createEl("img");
-    img.src = this.app.vault.getResourcePath(file);
+    img.src = imagePath;
     img.setAttribute("alt", params);
     const parsedData = this.parseImageData(img);
     await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
