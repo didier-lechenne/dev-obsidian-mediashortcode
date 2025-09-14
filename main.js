@@ -118,7 +118,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     });
   }
   async processGridImage(imageSyntax, container, sourcePath) {
-    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|([^\]]+))?\]\]/);
+    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
     if (!match) return;
     const imagePath = match[1];
     const params = match[3] || "";

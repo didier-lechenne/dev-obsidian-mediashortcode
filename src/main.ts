@@ -79,25 +79,26 @@ export default class ImageCaptions extends Plugin {
     })
   }
 
-  async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: string) {
-    // Parse the image syntax: ![[path|params]]
-    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|([^\]]+))?\]\]/)
-    if (!match) return
+async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: string) {
+    // Nouvelle regex pour capturer le chemin et tous les paramètres
+    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
+    if (!match) return;
 
-    const imagePath = match[1]
-    const params = match[3] || ''
+    const imagePath = match[1];
+    const params = match[3] || ''; // Tous les paramètres après le premier `|`
 
-    // Create img element
-    const img = container.createEl('img')
-    img.src = this.app.vault.adapter.getResourcePath(imagePath)
-    img.setAttribute('alt', params)
+    // Crée l'élément img
+    const img = container.createEl('img');
+    img.src = this.app.vault.adapter.getResourcePath(imagePath);
+    img.setAttribute('alt', params); // Passe les paramètres à alt
 
-    // Parse parameters
-    const parsedData = this.parseImageData(img)
-    
-    // Create figure container
-    await this.insertFigureWithCaption(img, container, parsedData, sourcePath)
-  }
+    // Analyse les données de l'image
+    const parsedData = this.parseImageData(img);
+
+    // Insère la figure avec la légende
+    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
+}
+
 
   parseImageData(img: HTMLElement | Element) {
     let altText = img.getAttribute('alt') || ''
