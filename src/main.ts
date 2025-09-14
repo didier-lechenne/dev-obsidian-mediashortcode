@@ -198,6 +198,13 @@ export default class ImageCaptions extends Plugin {
   async insertFigureWithCaption (imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
     let container: HTMLElement
     
+
+  if (parsedData.caption) {
+    imageEl.setAttribute('alt', parsedData.caption);
+  } else {
+    imageEl.removeAttribute('alt');
+  }
+
     if (parsedData.dataNom === 'imagenote') {
       // Special structure for imagenote
       container = outerEl.createEl('span')
