@@ -1,16 +1,27 @@
 
 
 
+:root {
+    --fontfamily: "Ecole", sans-serif;
+    --bigsize: clamp(2.50rem, calc(1.83rem + 3.33vw), 6.00rem);
+    --basesize: 1.15rem;
+    --color: rgba(0, 0, 0, 0.85);
+    --spacer: 2rem;
+    --sn-width: 15rem;
+    --accentcolor: black;
+    --maxwidth: 46rem;
+}
 
-.theme-dark .mediashortcode-figure,
-.theme-dark .mediashortcode-caption {
+.theme-dark .figure,
+.theme-dark .figcaption {
     background: #303030;
 }
 
-.theme-light .mediashortcode-figure,
-.theme-light .mediashortcode-caption {
+.theme-light .figure,
+.theme-light .figcaption {
     background: #ebebeb;
 }
+
 
 
 /* ------------------------------------------------------------------------ Images figures (template = figures) */
@@ -21,14 +32,20 @@
   align-content: start;
 }
 
+
+
+
+
 /* ------------------------------------------------------------------------ Images annexes (template = appendices) */
 /* set a grid */
-.appendices .content {
-  display: grid;
+
+.cm-content .internal-embed {
+  display: grid!important;
   grid-template-columns: repeat(12, 1fr);
   grid-gap: var(--spacer);
   align-content: start;
 }
+
 /* paragraphs, titles, blocquotes within appendices */
 .appendices .content > :not(figure){
   grid-column: span 8;
@@ -42,6 +59,14 @@
   padding: 0;
   max-width: none;
 }
+
+.figure, 
+.videofigure {
+    grid-column: var(--col, auto) / span var(--width, 3);
+}
+
+
+
 /* justify image figures at start */
 .figure {
   justify-self: start;
