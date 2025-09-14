@@ -1,7 +1,7 @@
 {
 	"id": "mediashortcode",
 	"name": "mediashortcode",
-	"version": "1.0.14",
+	"version": "1.0.15",
 	"minAppVersion": "0.15.0",
 	"description": "Enhanced image captions with support for imagenote, video embeds, and custom styling parameters",
 	"author": "Didier Lechenne",
