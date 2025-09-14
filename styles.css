@@ -37,7 +37,11 @@
 
 
 /* ------------------------------------------------------------------------ Images annexes (template = appendices) */
-/* set a grid */
+
+.internal-embed.image-embed {
+  display: none !important;
+}
+
 
 .figure-grid-container {
   display: grid!important;
