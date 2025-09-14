@@ -33,42 +33,25 @@
   grid-template-columns: repeat(12, 1fr);
   grid-gap: var(--spacer);
   align-content: start;
-  margin: 2rem 0;
-  padding: 1rem;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 8px;
+
 }
 
 /* Default 3-column layout for figures in grid */
 .figure-grid-container .figure,
 .figure-grid-container .videofigure {
-  grid-column: span 4; /* 3 columns by default */
+  grid-column: span 3; /* 3 columns by default */
   align-self: start;
   margin: 0;
   padding: 0;
   max-width: none;
 }
 
-/* Responsive grid - 2 columns on medium screens */
-@media screen and (max-width: 768px) {
-  .figure-grid-container .figure,
-  .figure-grid-container .videofigure {
-    grid-column: span 6; /* 2 columns on medium screens */
-  }
-}
 
-/* Responsive grid - 1 column on small screens */
-@media screen and (max-width: 480px) {
-  .figure-grid-container .figure,
-  .figure-grid-container .videofigure {
-    grid-column: span 12; /* 1 column on small screens */
-  }
-}
 
 /* Allow custom column spans via --col CSS variable */
 .figure-grid-container .figure,
 .figure-grid-container .videofigure {
-  grid-column: var(--col, auto) / span var(--width, 4);
+  grid-column: var(--col, auto) / span var(--width, 3);
 }
 
 /* ------------------------------------------------------------------------ Images annexes (template = appendices) */
