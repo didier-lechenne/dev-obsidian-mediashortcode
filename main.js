@@ -135,6 +135,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   createGroupedContainer(group) {
     const parent = group[0].parentElement;
     if (!parent) return;
+    if (parent.classList.contains("image-embed-group")) return;
     const groupContainer = parent.createEl("div", {
       cls: "image-embed-group"
     });

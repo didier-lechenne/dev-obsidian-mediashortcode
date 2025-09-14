@@ -120,6 +120,9 @@ export default class ImageCaptions extends Plugin {
     const parent = group[0].parentElement;
     if (!parent) return;
     
+    // Éviter de créer des groupes imbriqués
+    if (parent.classList.contains('image-embed-group')) return;
+    
     // Créer un conteneur pour le groupe
     const groupContainer = parent.createEl('div', { 
       cls: 'image-embed-group' 
