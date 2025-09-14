@@ -61,10 +61,10 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     this.figureGridProcessor = (source, el, ctx) => {
       const container = el.createDiv({ cls: "figure-grid-container" });
       const lines = source.trim().split("\n");
-      lines.forEach(async (line) => {
+      lines.forEach((line) => {
         const trimmedLine = line.trim();
         if (trimmedLine && trimmedLine.startsWith("![[")) {
-          await this.processGridImage(trimmedLine, container, ctx.sourcePath);
+          this.processGridImage(trimmedLine, container, ctx.sourcePath);
         }
       });
     };

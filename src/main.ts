@@ -71,10 +71,10 @@ export default class ImageCaptions extends Plugin {
     // Parse the content inside the code block
     const lines = source.trim().split('\n')
     
-    lines.forEach(async (line) => {
+    lines.forEach(line => {
       const trimmedLine = line.trim()
       if (trimmedLine && trimmedLine.startsWith('![[')) {
-        await this.processGridImage(trimmedLine, container, ctx.sourcePath)
+        this.processGridImage(trimmedLine, container, ctx.sourcePath)
       }
     })
   }
