@@ -19,13 +19,14 @@ export default class ImageCaptions extends Plugin {
     this.observer = new MutationObserver((mutations: MutationRecord[]) => {
       mutations.forEach((rec: MutationRecord) => {
         if (rec.type === 'childList') {
-          (<Element>rec.target)
-            // Search for all .image-embed nodes. Could be <div> or <span>
-            .querySelectorAll('.image-embed, .video-embed')
+          const container = rec.target as Element;
+          
+          // Grouper les image-embed consécutifs AVANT de les traiter
+          this.groupConsecutiveImageEmbeds(container);
+          
+          // Traiter normalement les image-embed restants
+          container.querySelectorAll('.image-embed, .video-embed')
             .forEach(async imageEmbedContainer => {
-              
-
-
               const img = imageEmbedContainer.querySelector('img, video')
               const width = imageEmbedContainer.getAttribute('width') || ''
               const parsedData = this.parseImageData(imageEmbedContainer)
@@ -70,6 +71,70 @@ export default class ImageCaptions extends Plugin {
       subtree: true,
       childList: true
     })
+  }
+
+  groupConsecutiveImageEmbeds(container: Element) {
+    const imageEmbeds = Array.from(container.querySelectorAll('.image-embed'));
+    
+    if (imageEmbeds.length <= 1) return;
+    
+    let consecutiveGroups: Element[][] = [];
+    let currentGroup: Element[] = [];
+    
+    for (let i = 0; i < imageEmbeds.length; i++) {
+      const current = imageEmbeds[i];
+      const next = imageEmbeds[i + 1];
+      
+      currentGroup.push(current);
+      
+      // Vérifier si l'élément suivant est consécutif (même parent, éléments adjacents)
+      if (!next || !this.areConsecutive(current, next)) {
+        if (currentGroup.length > 1) {
+          consecutiveGroups.push(currentGroup);
+        }
+        currentGroup = [];
+      }
+    }
+    
+    // Créer des conteneurs groupés
+    consecutiveGroups.forEach(group => {
+      this.createGroupedContainer(group);
+    });
+  }
+
+  areConsecutive(elem1: Element, elem2: Element): boolean {
+    // Vérifier si les éléments ont le même parent
+    if (elem1.parentElement !== elem2.parentElement) return false;
+    
+    // Vérifier si elem2 suit directement elem1 (ou avec seulement du whitespace entre)
+    let nextSibling = elem1.nextElementSibling;
+    while (nextSibling && nextSibling.nodeType === Node.TEXT_NODE && 
+           (nextSibling.textContent || '').trim() === '') {
+      nextSibling = nextSibling.nextElementSibling;
+    }
+    
+    return nextSibling === elem2;
+  }
+
+  createGroupedContainer(group: Element[]) {
+    const parent = group[0].parentElement;
+    if (!parent) return;
+    
+    // Créer un conteneur pour le groupe
+    const groupContainer = parent.createEl('div', { 
+      cls: 'image-embed-group' 
+    });
+    
+    // Insérer le conteneur à la place du premier élément
+    parent.insertBefore(groupContainer, group[0]);
+    
+    // Déplacer tous les éléments du groupe dans le conteneur
+    group.forEach(elem => {
+      groupContainer.appendChild(elem);
+    });
+    
+    // Optionnel: ajouter des classes CSS pour la mise en forme
+    groupContainer.addClass('figure-grid'); // ou toute autre classe de votre choix
   }
 
   /**
@@ -205,13 +270,12 @@ export default class ImageCaptions extends Plugin {
    */
   async insertFigureWithCaption (imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
     let container: HTMLElement
-    
 
-  if (parsedData.caption) {
-    imageEl.setAttribute('alt', parsedData.caption);
-  } else {
-    imageEl.removeAttribute('alt');
-  }
+    if (parsedData.caption) {
+      imageEl.setAttribute('alt', parsedData.caption);
+    } else {
+      imageEl.removeAttribute('alt');
+    }
 
     if (parsedData.dataNom === 'imagenote') {
       // Special structure for imagenote

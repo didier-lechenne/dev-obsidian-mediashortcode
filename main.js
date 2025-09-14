@@ -64,7 +64,9 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     this.observer = new MutationObserver((mutations) => {
       mutations.forEach((rec) => {
         if (rec.type === "childList") {
-          rec.target.querySelectorAll(".image-embed, .video-embed").forEach(async (imageEmbedContainer) => {
+          const container = rec.target;
+          this.groupConsecutiveImageEmbeds(container);
+          container.querySelectorAll(".image-embed, .video-embed").forEach(async (imageEmbedContainer) => {
             var _a, _b;
             const img = imageEmbedContainer.querySelector("img, video");
             const width = imageEmbedContainer.getAttribute("width") || "";
@@ -101,6 +103,46 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       subtree: true,
       childList: true
     });
+  }
+  groupConsecutiveImageEmbeds(container) {
+    const imageEmbeds = Array.from(container.querySelectorAll(".image-embed"));
+    if (imageEmbeds.length <= 1) return;
+    let consecutiveGroups = [];
+    let currentGroup = [];
+    for (let i = 0; i < imageEmbeds.length; i++) {
+      const current = imageEmbeds[i];
+      const next = imageEmbeds[i + 1];
+      currentGroup.push(current);
+      if (!next || !this.areConsecutive(current, next)) {
+        if (currentGroup.length > 1) {
+          consecutiveGroups.push(currentGroup);
+        }
+        currentGroup = [];
+      }
+    }
+    consecutiveGroups.forEach((group) => {
+      this.createGroupedContainer(group);
+    });
+  }
+  areConsecutive(elem1, elem2) {
+    if (elem1.parentElement !== elem2.parentElement) return false;
+    let nextSibling = elem1.nextElementSibling;
+    while (nextSibling && nextSibling.nodeType === Node.TEXT_NODE && (nextSibling.textContent || "").trim() === "") {
+      nextSibling = nextSibling.nextElementSibling;
+    }
+    return nextSibling === elem2;
+  }
+  createGroupedContainer(group) {
+    const parent = group[0].parentElement;
+    if (!parent) return;
+    const groupContainer = parent.createEl("div", {
+      cls: "image-embed-group"
+    });
+    parent.insertBefore(groupContainer, group[0]);
+    group.forEach((elem) => {
+      groupContainer.appendChild(elem);
+    });
+    groupContainer.addClass("figure-grid");
   }
   /**
    * Parse image data from alt attribute
