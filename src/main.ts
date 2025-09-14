@@ -102,24 +102,24 @@ export default class ImageCaptions extends Plugin {
     });
   };
 
-  async processGridImage(
-    imageSyntax: string,
-    container: HTMLElement,
-    sourcePath: string
-  ) {
-    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|([^\]]+))?\]\]/);
-    if (!match) return;
+async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: string) {
+    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|([^\]]+))?\]\]/)
+    if (!match) return
 
-    const imagePath = match[1];
-    const params = match[3] || "";
+    const imagePath = match[1]
+    const params = match[3] || ''
 
-    const img = container.createEl("img");
-    img.src = imagePath; // Laisse Obsidian résoudre le chemin
-    img.setAttribute("alt", params);
+    // Correction : utiliser app.vault.adapter.path.normalize et getResourcePath correctement
+    const file = this.app.vault.getAbstractFileByPath(imagePath)
+    if (!file) return
 
-    const parsedData = this.parseImageData(img);
-    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
-  }
+    const img = container.createEl('img')
+    img.src = this.app.vault.getResourcePath(file as any)
+    img.setAttribute('alt', params)
+
+    const parsedData = this.parseImageData(img)
+    await this.insertFigureWithCaption(img, container, parsedData, sourcePath)
+}
 
   parseImageData(img: HTMLElement | Element) {
     let altText = img.getAttribute("alt") || "";
