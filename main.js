@@ -146,30 +146,34 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     };
   }
   createGridContainers(container) {
-    const paragraphs = container.querySelectorAll("p");
-    paragraphs.forEach((p) => {
-      var _a, _b, _c, _d;
-      const images = Array.from(p.querySelectorAll("img:not(.emoji), video"));
-      if (images.length > 1) {
-        const gridContainer = p.createEl("div", { cls: "figure-grid-container" });
-        images.forEach((img) => {
+    const images = Array.from(container.querySelectorAll("img:not(.emoji), video"));
+    let currentGroup = [];
+    let allGroups = [];
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      const parsedData = this.parseImageData(img);
+      if (parsedData.caption || parsedData.dataNom !== "image" || parsedData.width || parsedData.class.length > 0) {
+        currentGroup.push(img);
+      } else {
+        if (currentGroup.length > 0) {
+          allGroups.push([...currentGroup]);
+          currentGroup = [];
+        }
+      }
+    }
+    if (currentGroup.length > 0) {
+      allGroups.push(currentGroup);
+    }
+    allGroups.forEach((group) => {
+      if (group.length > 0) {
+        const firstImg = group[0];
+        const parent = firstImg.parentElement;
+        if (!parent) return;
+        const gridContainer = parent.createEl("div", { cls: "figure-grid-container" });
+        parent.insertBefore(gridContainer, firstImg);
+        group.forEach((img) => {
           gridContainer.appendChild(img);
         });
-        (_a = p.parentElement) == null ? void 0 : _a.insertBefore(gridContainer, p);
-        if (((_b = p.textContent) == null ? void 0 : _b.trim()) === "") {
-          p.remove();
-        }
-      } else if (images.length === 1) {
-        const img = images[0];
-        const parsedData = this.parseImageData(img);
-        if (parsedData.caption || parsedData.dataNom !== "image") {
-          const gridContainer = p.createEl("div", { cls: "figure-grid-container" });
-          gridContainer.appendChild(img);
-          (_c = p.parentElement) == null ? void 0 : _c.insertBefore(gridContainer, p);
-          if (((_d = p.textContent) == null ? void 0 : _d.trim()) === "") {
-            p.remove();
-          }
-        }
       }
     });
   }
@@ -186,10 +190,6 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   parseImageData(img) {
     let altText = img.getAttribute("alt") || "";
     const src = img.getAttribute("src") || "";
-    const edge = altText.replace(/ > /, "#");
-    if (altText === src || edge === src) {
-      return { caption: "", dataNom: "image", id: this.generateSlug(src) };
-    }
     const parts = altText.split("|").map((part) => part.trim());
     const result = {
       dataNom: "image",
@@ -205,6 +205,11 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       imgW: void 0,
       id: this.generateSlug(src)
     };
+    const edge = altText.replace(/ > /, "#");
+    if (altText === src || edge === src) {
+      result.caption = "";
+      return result;
+    }
     if (parts.length > 1 && ["imagenote", "image", "imageGrid", "figure", "video"].includes(parts[0])) {
       result.dataNom = parts[0];
       for (let i = 1; i < parts.length; i++) {

@@ -131,42 +131,51 @@ export default class ImageCaptions extends Plugin {
   }
 
   createGridContainers(container: Element) {
-    const paragraphs = container.querySelectorAll('p');
+    // Traiter toutes les images, pas seulement dans les paragraphes
+    const images = Array.from(container.querySelectorAll('img:not(.emoji), video'));
     
-    paragraphs.forEach(p => {
-      const images = Array.from(p.querySelectorAll('img:not(.emoji), video'));
+    // Grouper les images consécutives
+    let currentGroup: HTMLElement[] = [];
+    let allGroups: HTMLElement[][] = [];
+    
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i] as HTMLElement;
+      const parsedData = this.parseImageData(img);
       
-      if (images.length > 1) {
-        // Créer un figure-grid-container pour les images multiples
-        const gridContainer = p.createEl('div', { cls: 'figure-grid-container' });
+      // Ajouter à un groupe si l'image a des propriétés spéciales
+      if (parsedData.caption || parsedData.dataNom !== 'image' || parsedData.width || parsedData.class.length > 0) {
+        currentGroup.push(img);
+      } else {
+        // Finaliser le groupe actuel s'il existe
+        if (currentGroup.length > 0) {
+          allGroups.push([...currentGroup]);
+          currentGroup = [];
+        }
+      }
+    }
+    
+    // Ajouter le dernier groupe
+    if (currentGroup.length > 0) {
+      allGroups.push(currentGroup);
+    }
+    
+    // Créer les conteneurs pour chaque groupe
+    allGroups.forEach(group => {
+      if (group.length > 0) {
+        const firstImg = group[0];
+        const parent = firstImg.parentElement;
+        if (!parent) return;
         
-        // Déplacer les images vers le conteneur grid
-        images.forEach(img => {
+        // Créer le conteneur grid
+        const gridContainer = parent.createEl('div', { cls: 'figure-grid-container' });
+        
+        // Insérer avant la première image
+        parent.insertBefore(gridContainer, firstImg);
+        
+        // Déplacer toutes les images du groupe
+        group.forEach(img => {
           gridContainer.appendChild(img);
         });
-        
-        // Insérer le conteneur avant le paragraphe
-        p.parentElement?.insertBefore(gridContainer, p);
-        
-        // Supprimer le paragraphe s'il est vide
-        if (p.textContent?.trim() === '') {
-          p.remove();
-        }
-      } else if (images.length === 1) {
-        // Une seule image : la traiter directement
-        const img = images[0];
-        const parsedData = this.parseImageData(img);
-        
-        if (parsedData.caption || parsedData.dataNom !== 'image') {
-          // Créer un conteneur grid même pour une seule image si elle a des propriétés spéciales
-          const gridContainer = p.createEl('div', { cls: 'figure-grid-container' });
-          gridContainer.appendChild(img);
-          p.parentElement?.insertBefore(gridContainer, p);
-          
-          if (p.textContent?.trim() === '') {
-            p.remove();
-          }
-        }
       }
     });
   }
@@ -190,12 +199,6 @@ export default class ImageCaptions extends Plugin {
     let altText = img.getAttribute('alt') || ''
     const src = img.getAttribute('src') || ''
     
-    // Check if it's the default Obsidian behavior
-    const edge = altText.replace(/ > /, '#')
-    if (altText === src || edge === src) {
-      return { caption: '', dataNom: 'image', id: this.generateSlug(src) }
-    }
-
     // Split by pipe
     const parts = altText.split('|').map(part => part.trim())
     
@@ -212,6 +215,13 @@ export default class ImageCaptions extends Plugin {
       imgY: undefined as string | undefined,
       imgW: undefined as string | undefined,
       id: this.generateSlug(src)
+    }
+    
+    // Check if it's the default Obsidian behavior
+    const edge = altText.replace(/ > /, '#')
+    if (altText === src || edge === src) {
+      result.caption = ''
+      return result
     }
 
     // New syntax: first part is data-nom
