@@ -39,7 +39,7 @@
 /* ------------------------------------------------------------------------ Images annexes (template = appendices) */
 /* set a grid */
 
-.cm-content .internal-embed {
+.figure-grid-container {
   display: grid!important;
   grid-template-columns: repeat(12, 1fr);
   grid-gap: var(--spacer);

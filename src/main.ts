@@ -69,71 +69,39 @@ export default class ImageCaptions extends Plugin {
     })
   }
 
-  groupConsecutiveImageEmbeds(container: Element) {
-    const imageEmbeds = Array.from(container.querySelectorAll('.image-embed'));
+  needsGridWrapper(outerEl: HTMLElement | Element): boolean {
+    // Vérifier s'il y a déjà d'autres figures dans le même conteneur
+    const parent = outerEl.parentElement;
+    if (!parent) return false;
     
-    if (imageEmbeds.length <= 1) return;
+    const existingFigures = parent.querySelectorAll('.figure, .videofigure');
+    return existingFigures.length > 0;
+  }
+
+  getOrCreateGridWrapper(outerEl: HTMLElement | Element): HTMLElement {
+    const parent = outerEl.parentElement;
+    if (!parent) return outerEl as HTMLElement;
     
-    let consecutiveGroups: Element[][] = [];
-    let currentGroup: Element[] = [];
+    // Chercher un wrapper existant
+    let gridWrapper = parent.querySelector('.figure-grid-container') as HTMLElement;
     
-    for (let i = 0; i < imageEmbeds.length; i++) {
-      const current = imageEmbeds[i];
-      const next = imageEmbeds[i + 1];
+    if (!gridWrapper) {
+      // Créer le wrapper
+      gridWrapper = parent.createEl('div', { cls: 'figure-grid-container' });
       
-      currentGroup.push(current);
-      
-      // Vérifier si l'élément suivant est consécutif (même parent, éléments adjacents)
-      if (!next || !this.areConsecutive(current, next)) {
-        if (currentGroup.length > 1) {
-          consecutiveGroups.push(currentGroup);
-        }
-        currentGroup = [];
+      // Insérer avant le premier élément figure
+      const firstFigure = parent.querySelector('.figure, .videofigure, .image-embed');
+      if (firstFigure) {
+        parent.insertBefore(gridWrapper, firstFigure);
+        
+        // Déplacer toutes les figures existantes dans le wrapper
+        parent.querySelectorAll('.figure, .videofigure').forEach(fig => {
+          gridWrapper.appendChild(fig);
+        });
       }
     }
     
-    // Créer des conteneurs groupés
-    consecutiveGroups.forEach(group => {
-      this.createGroupedContainer(group);
-    });
-  }
-
-  areConsecutive(elem1: Element, elem2: Element): boolean {
-    // Vérifier si les éléments ont le même parent
-    if (elem1.parentElement !== elem2.parentElement) return false;
-    
-    // Vérifier si elem2 suit directement elem1 (ou avec seulement du whitespace entre)
-    let nextSibling = elem1.nextElementSibling;
-    while (nextSibling && nextSibling.nodeType === Node.TEXT_NODE && 
-           (nextSibling.textContent || '').trim() === '') {
-      nextSibling = nextSibling.nextElementSibling;
-    }
-    
-    return nextSibling === elem2;
-  }
-
-  createGroupedContainer(group: Element[]) {
-    const parent = group[0].parentElement;
-    if (!parent) return;
-    
-    // Éviter de créer des groupes imbriqués
-    if (parent.classList.contains('image-embed-group')) return;
-    
-    // Créer un conteneur pour le groupe
-    const groupContainer = parent.createEl('div', { 
-      cls: 'image-embed-group' 
-    });
-    
-    // Insérer le conteneur à la place du premier élément
-    parent.insertBefore(groupContainer, group[0]);
-    
-    // Déplacer tous les éléments du groupe dans le conteneur
-    group.forEach(elem => {
-      groupContainer.appendChild(elem);
-    });
-    
-    // Optionnel: ajouter des classes CSS pour la mise en forme
-    groupContainer.addClass('figure-grid'); // ou toute autre classe de votre choix
+    return gridWrapper;
   }
 
   /**
@@ -268,7 +236,13 @@ export default class ImageCaptions extends Plugin {
    * Replace the original <img> element with appropriate structure
    */
   async insertFigureWithCaption (imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
-    let container: HTMLElement
+    let container: HTMLElement;
+    let parentContainer = outerEl;
+    
+    // Si on a besoin d'une grille OU si width/col sont spécifiés
+    if (this.needsGridWrapper(outerEl) || parsedData.width || parsedData.col) {
+      parentContainer = this.getOrCreateGridWrapper(outerEl);
+    }
 
     if (parsedData.caption) {
       imageEl.setAttribute('alt', parsedData.caption);
@@ -278,7 +252,7 @@ export default class ImageCaptions extends Plugin {
 
     if (parsedData.dataNom === 'imagenote') {
       // Special structure for imagenote
-      container = outerEl.createEl('span')
+      container = parentContainer.createEl('span')
       container.addClass('imagenote')
       container.setAttribute('id', parsedData.id)
       container.setAttribute('data-src', imageEl.getAttribute('src') || '')
@@ -297,7 +271,7 @@ export default class ImageCaptions extends Plugin {
       }
     } else if (parsedData.dataNom === 'video') {
       // Special structure for video
-      container = outerEl.createEl('figure')
+      container = parentContainer.createEl('figure')
       container.addClass('videofigure')
       container.setAttribute('data-src', imageEl.getAttribute('src') || '')
       
@@ -342,7 +316,7 @@ export default class ImageCaptions extends Plugin {
       }
     } else {
       // Standard figure structure for other types
-      container = outerEl.createEl('figure')
+      container = parentContainer.createEl('figure')
       container.addClass('figure')
       container.setAttribute('data-nom', parsedData.dataNom)
       container.setAttribute('id', parsedData.id)

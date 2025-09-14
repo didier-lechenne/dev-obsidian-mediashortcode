@@ -102,46 +102,27 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       childList: true
     });
   }
-  groupConsecutiveImageEmbeds(container) {
-    const imageEmbeds = Array.from(container.querySelectorAll(".image-embed"));
-    if (imageEmbeds.length <= 1) return;
-    let consecutiveGroups = [];
-    let currentGroup = [];
-    for (let i = 0; i < imageEmbeds.length; i++) {
-      const current = imageEmbeds[i];
-      const next = imageEmbeds[i + 1];
-      currentGroup.push(current);
-      if (!next || !this.areConsecutive(current, next)) {
-        if (currentGroup.length > 1) {
-          consecutiveGroups.push(currentGroup);
-        }
-        currentGroup = [];
+  needsGridWrapper(outerEl) {
+    const parent = outerEl.parentElement;
+    if (!parent) return false;
+    const existingFigures = parent.querySelectorAll(".figure, .videofigure");
+    return existingFigures.length > 0;
+  }
+  getOrCreateGridWrapper(outerEl) {
+    const parent = outerEl.parentElement;
+    if (!parent) return outerEl;
+    let gridWrapper = parent.querySelector(".figure-grid-container");
+    if (!gridWrapper) {
+      gridWrapper = parent.createEl("div", { cls: "figure-grid-container" });
+      const firstFigure = parent.querySelector(".figure, .videofigure, .image-embed");
+      if (firstFigure) {
+        parent.insertBefore(gridWrapper, firstFigure);
+        parent.querySelectorAll(".figure, .videofigure").forEach((fig) => {
+          gridWrapper.appendChild(fig);
+        });
       }
     }
-    consecutiveGroups.forEach((group) => {
-      this.createGroupedContainer(group);
-    });
-  }
-  areConsecutive(elem1, elem2) {
-    if (elem1.parentElement !== elem2.parentElement) return false;
-    let nextSibling = elem1.nextElementSibling;
-    while (nextSibling && nextSibling.nodeType === Node.TEXT_NODE && (nextSibling.textContent || "").trim() === "") {
-      nextSibling = nextSibling.nextElementSibling;
-    }
-    return nextSibling === elem2;
-  }
-  createGroupedContainer(group) {
-    const parent = group[0].parentElement;
-    if (!parent) return;
-    if (parent.classList.contains("image-embed-group")) return;
-    const groupContainer = parent.createEl("div", {
-      cls: "image-embed-group"
-    });
-    parent.insertBefore(groupContainer, group[0]);
-    group.forEach((elem) => {
-      groupContainer.appendChild(elem);
-    });
-    groupContainer.addClass("figure-grid");
+    return gridWrapper;
   }
   /**
    * Parse image data from alt attribute
@@ -274,13 +255,17 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
     var _a, _b, _c;
     let container;
+    let parentContainer = outerEl;
+    if (this.needsGridWrapper(outerEl) || parsedData.width || parsedData.col) {
+      parentContainer = this.getOrCreateGridWrapper(outerEl);
+    }
     if (parsedData.caption) {
       imageEl.setAttribute("alt", parsedData.caption);
     } else {
       imageEl.removeAttribute("alt");
     }
     if (parsedData.dataNom === "imagenote") {
-      container = outerEl.createEl("span");
+      container = parentContainer.createEl("span");
       container.addClass("imagenote");
       container.setAttribute("id", parsedData.id);
       container.setAttribute("data-src", imageEl.getAttribute("src") || "");
@@ -294,7 +279,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         captionSpan.replaceChildren(...children);
       }
     } else if (parsedData.dataNom === "video") {
-      container = outerEl.createEl("figure");
+      container = parentContainer.createEl("figure");
       container.addClass("videofigure");
       container.setAttribute("data-src", imageEl.getAttribute("src") || "");
       if (parsedData.class && parsedData.class.length > 0) {
@@ -329,7 +314,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         }).replaceChildren(...children);
       }
     } else {
-      container = outerEl.createEl("figure");
+      container = parentContainer.createEl("figure");
       container.addClass("figure");
       container.setAttribute("data-nom", parsedData.dataNom);
       container.setAttribute("id", parsedData.id);
