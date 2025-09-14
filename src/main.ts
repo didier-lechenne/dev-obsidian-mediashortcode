@@ -19,21 +19,11 @@ export default class ImageCaptions extends Plugin {
     this.observer = new MutationObserver((mutations: MutationRecord[]) => {
       mutations.forEach((rec: MutationRecord) => {
         if (rec.type === 'childList') {
-          // Traiter les figure-grid-container
+          // Intercepter les div.image-embed d'Obsidian et les remplacer
           (<Element>rec.target)
-            .querySelectorAll('.figure-grid-container')
-            .forEach(async container => {
-              this.processGridContainer(container);
-            });
-          
-          // Traiter les nouvelles images ajoutées directement
-          (<Element>rec.target)
-            .querySelectorAll('img:not(.emoji), video')
-            .forEach(async img => {
-              const parent = img.parentElement;
-              if (parent && !parent.closest('.figure-grid-container') && !img.closest('figure')) {
-                await this.processStandaloneImage(img as HTMLElement);
-              }
+            .querySelectorAll('.internal-embed.image-embed')
+            .forEach(async embedDiv => {
+              await this.replaceObsidianEmbed(embedDiv);
             });
         }
       });
@@ -43,6 +33,65 @@ export default class ImageCaptions extends Plugin {
       subtree: true,
       childList: true
     });
+  }
+
+  async replaceObsidianEmbed(embedDiv: Element) {
+    const img = embedDiv.querySelector('img, video') as HTMLElement;
+    if (!img) return;
+    
+    const parsedData = this.parseImageData(embedDiv);
+    const parent = embedDiv.parentElement;
+    if (!parent) return;
+    
+    // Chercher un conteneur grid existant dans le parent
+    let gridContainer = parent.querySelector('.figure-grid-container');
+    
+    if (!gridContainer) {
+      // Créer le conteneur grid seulement s'il n'existe pas
+      gridContainer = parent.createEl('div', { cls: 'figure-grid-container' });
+      
+      // Insérer avant le premier div d'Obsidian
+      const firstEmbed = parent.querySelector('.internal-embed.image-embed');
+      if (firstEmbed) {
+        parent.insertBefore(gridContainer, firstEmbed);
+      }
+    }
+    
+    // Déplacer l'image vers le conteneur grid
+    gridContainer.appendChild(img);
+    
+    // Créer la figure
+    await this.createFigureInGrid(img, parsedData);
+    
+    // Supprimer le div d'Obsidian
+    embedDiv.remove();
+  }
+
+  async processNewImages(container: Element) {
+    const images = container.querySelectorAll('img:not(.emoji), video');
+    
+    if (images.length === 0) return;
+    
+    // Créer le conteneur grid
+    const gridContainer = container.createEl('div', { cls: 'figure-grid-container' });
+    
+    // Traiter chaque image
+    images.forEach(async img => {
+      const parsedData = this.parseImageData(img);
+      
+      if (parsedData.caption || parsedData.dataNom !== 'image' || parsedData.width || parsedData.class.length > 0) {
+        // Déplacer l'image vers le conteneur grid
+        gridContainer.appendChild(img);
+        
+        // Créer la figure
+        await this.createFigureInGrid(img as HTMLElement, parsedData);
+      }
+    });
+    
+    // Si le conteneur grid est vide, le supprimer
+    if (gridContainer.children.length === 0) {
+      gridContainer.remove();
+    }
   }
 
   async processGridContainer(container: Element) {
@@ -118,15 +167,31 @@ export default class ImageCaptions extends Plugin {
 
   externalImageProcessor(): MarkdownPostProcessor {
     return (el, ctx) => {
-      // Créer des conteneurs grid pour les images multiples
-      this.createGridContainers(el);
+      // Grouper toutes les images avec propriétés dans un seul conteneur
+      const imagesToProcess: HTMLElement[] = [];
       
-      // Traiter les images individuelles
-      el.findAll('img:not(.emoji), video').forEach(async img => {
-        if (!img.closest('.figure-grid-container')) {
-          await this.processStandaloneImage(img);
+      el.findAll('img:not(.emoji), video').forEach(img => {
+        const parsedData = this.parseImageData(img);
+        if (parsedData.caption || parsedData.dataNom !== 'image' || parsedData.width || parsedData.class.length > 0) {
+          imagesToProcess.push(img);
         }
       });
+      
+      if (imagesToProcess.length > 0) {
+        // Créer UN SEUL conteneur grid pour toutes les images
+        const gridContainer = el.createEl('div', { cls: 'figure-grid-container' });
+        
+        // Traiter toutes les images dans le même conteneur
+        imagesToProcess.forEach(async img => {
+          const parsedData = this.parseImageData(img);
+          
+          // Déplacer l'image vers le conteneur unique
+          gridContainer.appendChild(img);
+          
+          // Créer la figure
+          await this.createFigureInGrid(img, parsedData);
+        });
+      }
     };
   }
 
