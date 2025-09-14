@@ -289,7 +289,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       }
     } else {
       container = outerEl.createEl("figure");
-      container.addClass("mediashortcode-figure");
+      container.addClass("figure");
       container.setAttribute("data-nom", parsedData.dataNom);
       container.setAttribute("id", parsedData.id);
       if (parsedData.class && parsedData.class.length > 0) {
@@ -313,7 +313,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       if (parsedData.caption) {
         const children = (_c = await renderMarkdown(parsedData.caption, sourcePath, this)) != null ? _c : [parsedData.caption];
         container.createEl("figcaption", {
-          cls: "mediashortcode-caption"
+          cls: "figcaption"
         }).replaceChildren(...children);
       }
     }

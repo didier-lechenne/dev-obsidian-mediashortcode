@@ -1,17 +1,6 @@
-.mediashortcode-figure {
-    margin: 0;
-    padding: 2px;
-    display: table; /* To allow for correct caption text wrapping */
-    border-radius: 2px;
-}
 
-.mediashortcode-caption {
-    margin: -5px 0 0 0;
-    padding: 3px 5px;
-    text-align: center;
-    display: table-caption; /* To allow for correct caption text wrapping */
-    caption-side: bottom;
-}
+
+
 
 .theme-dark .mediashortcode-figure,
 .theme-dark .mediashortcode-caption {
@@ -22,3 +11,154 @@
 .theme-light .mediashortcode-caption {
     background: #ebebeb;
 }
+
+
+/* ------------------------------------------------------------------------ Images figures (template = figures) */
+.figures_page .content {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-gap: var(--spacer);
+  align-content: start;
+}
+
+/* ------------------------------------------------------------------------ Images annexes (template = appendices) */
+/* set a grid */
+.appendices .content {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  grid-gap: var(--spacer);
+  align-content: start;
+}
+/* paragraphs, titles, blocquotes within appendices */
+.appendices .content > :not(figure){
+  grid-column: span 8;
+}
+/* figures and videofigures default : 3 cols  */
+.videofigure,
+.figure {
+  grid-column: span 3;
+  align-self: start;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+}
+/* justify image figures at start */
+.figure {
+  justify-self: start;
+}
+.figure img {
+  display: block;
+}
+.videofigure .video {
+  max-width: none;
+}
+
+figcaption {
+  font-size: 0.85rem;
+  background: white;
+  padding: 0.5em 0 0;
+}
+figcaption::before {
+  content: "â†‘ ";
+}
+figcaption:empty { display: none;}
+
+/* largeur et dÃ©calage des .figure et .videofigure, uniquement pour la version Ã©cran */
+.screen .figure,
+.screen .videofigure  {
+  grid-column: var(--col, auto) / span var(--width, 3);
+}
+
+/* alignement vertical des .figure */
+.figure.top { align-self: start;}
+.figure.center { align-self: center;}
+.figure.bottom { align-self: end;} 
+
+@media screen and (max-width:40rem) {
+  .figure, .videofigure { 
+    grid-column: 1 / -1 !important;
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  figcaption::before {
+    content: "â†“ " !important;
+  }
+}
+
+/* notwhite has a greu background */
+.notwhite {
+  background: rgba(0, 0, 0, 0.05);
+}
+.notwhite img {
+  mix-blend-mode: multiply;
+}
+.notwhite .caption,
+.notwhite figcaption {
+  background: white; 
+}
+
+
+/* ------------------------------------------------------------------------ Videos */
+.video {
+  max-width: var(--maxwidth);
+  aspect-ratio: 16/9;
+  position: relative;
+  margin: 1em 0;
+}
+.video[style]{
+  background: var(--poster);
+  background-size: cover;
+}
+.video iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+.video + figcaption {
+  margin-top: -1em;
+}
+.video > * {
+  aspect-ratio: 16 / 9;
+  display: grid;
+  inline-size: 100%;
+  position: relative;
+  background: var(--poster);
+  background-size: cover;
+}
+.video > * > iframe { 
+  block-size: 100%;
+  border: 0;
+  border-radius: inherit;
+  inline-size: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+}
+.video iframe:not([src=""]) + button {
+  display: none;
+}
+.video button {
+  background-color: var(--button-bgc, #F00);
+  block-size: var(--button-h, 50px);
+  border: 0;
+  border-radius: var(--button-bdrs, 14%);
+  display: grid;
+  inline-size: var(--button-w, 75px);
+  opacity: var(--button-op, 0.8);
+  position: absolute;
+  place-self: center;
+  transition: all .2s ease-in;
+}
+.video button::before {
+  aspect-ratio: 1;
+  background: #FFF;
+  block-size: 1.5em;
+  clip-path: polygon(20% 0%, 20% 100%, 100% 50%);
+  content: '';
+  place-self: center;
+}
+
+vimeo-embed button { --button-bgc: #00adef; }

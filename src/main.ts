@@ -280,7 +280,7 @@ export default class ImageCaptions extends Plugin {
     } else {
       // Standard figure structure for other types
       container = outerEl.createEl('figure')
-      container.addClass('mediashortcode-figure')
+      container.addClass('figure')
       container.setAttribute('data-nom', parsedData.dataNom)
       container.setAttribute('id', parsedData.id)
       
@@ -313,7 +313,7 @@ export default class ImageCaptions extends Plugin {
       if (parsedData.caption) {
         const children = await renderMarkdown(parsedData.caption, sourcePath, this) ?? [parsedData.caption]
         container.createEl('figcaption', {
-          cls: 'mediashortcode-caption'
+          cls: 'figcaption'
         }).replaceChildren(...children)
       }
     }
