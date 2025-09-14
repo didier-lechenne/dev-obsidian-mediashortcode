@@ -9,6 +9,9 @@ export default class ImageCaptions extends Plugin {
   observer: MutationObserver
 
   async onload () {
+    // Register code block processor for figure-grid-container
+    this.registerMarkdownCodeBlockProcessor('figure-grid-container', this.figureGridProcessor.bind(this))
+    
     this.registerMarkdownPostProcessor(
       this.externalImageProcessor()
     )
@@ -59,6 +62,41 @@ export default class ImageCaptions extends Plugin {
       subtree: true,
       childList: true
     })
+  }
+
+  // New processor for figure-grid-container code blocks
+  figureGridProcessor = (source: string, el: HTMLElement, ctx: any) => {
+    const container = el.createDiv({ cls: 'figure-grid-container' })
+    
+    // Parse the content inside the code block
+    const lines = source.trim().split('\n')
+    
+    lines.forEach(async (line) => {
+      const trimmedLine = line.trim()
+      if (trimmedLine && trimmedLine.startsWith('![[')) {
+        await this.processGridImage(trimmedLine, container, ctx.sourcePath)
+      }
+    })
+  }
+
+  async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: string) {
+    // Parse the image syntax: ![[path|params]]
+    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|([^\]]+))?\]\]/)
+    if (!match) return
+
+    const imagePath = match[1]
+    const params = match[3] || ''
+
+    // Create img element
+    const img = container.createEl('img')
+    img.src = this.app.vault.adapter.getResourcePath(imagePath)
+    img.setAttribute('alt', params)
+
+    // Parse parameters
+    const parsedData = this.parseImageData(img)
+    
+    // Create figure container
+    await this.insertFigureWithCaption(img, container, parsedData, sourcePath)
   }
 
   parseImageData(img: HTMLElement | Element) {

@@ -1,6 +1,3 @@
-
-
-
 :root {
     --fontfamily: "Ecole", sans-serif;
     --bigsize: clamp(2.50rem, calc(1.83rem + 3.33vw), 6.00rem);
@@ -22,8 +19,6 @@
     background: #ebebeb;
 }
 
-
-
 /* ------------------------------------------------------------------------ Images figures (template = figures) */
 .figures_page .content {
   display: grid;
@@ -32,24 +27,57 @@
   align-content: start;
 }
 
-
-
-
-
-/* ------------------------------------------------------------------------ Images annexes (template = appendices) */
-
-
+/* ------------------------------------------------------------------------ Grid container for multiple images */
 .figure-grid-container {
-  display: grid!important;
+  display: grid !important;
   grid-template-columns: repeat(12, 1fr);
   grid-gap: var(--spacer);
   align-content: start;
+  margin: 2rem 0;
+  padding: 1rem;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
 }
+
+/* Default 3-column layout for figures in grid */
+.figure-grid-container .figure,
+.figure-grid-container .videofigure {
+  grid-column: span 4; /* 3 columns by default */
+  align-self: start;
+  margin: 0;
+  padding: 0;
+  max-width: none;
+}
+
+/* Responsive grid - 2 columns on medium screens */
+@media screen and (max-width: 768px) {
+  .figure-grid-container .figure,
+  .figure-grid-container .videofigure {
+    grid-column: span 6; /* 2 columns on medium screens */
+  }
+}
+
+/* Responsive grid - 1 column on small screens */
+@media screen and (max-width: 480px) {
+  .figure-grid-container .figure,
+  .figure-grid-container .videofigure {
+    grid-column: span 12; /* 1 column on small screens */
+  }
+}
+
+/* Allow custom column spans via --col CSS variable */
+.figure-grid-container .figure,
+.figure-grid-container .videofigure {
+  grid-column: var(--col, auto) / span var(--width, 4);
+}
+
+/* ------------------------------------------------------------------------ Images annexes (template = appendices) */
 
 /* paragraphs, titles, blocquotes within appendices */
 .appendices .content > :not(figure){
   grid-column: span 8;
 }
+
 /* figures and videofigures default : 3 cols  */
 .videofigure,
 .figure {
@@ -64,8 +92,6 @@
 .videofigure {
     grid-column: var(--col, auto) / span var(--width, 3);
 }
-
-
 
 /* justify image figures at start */
 .figure {
@@ -84,11 +110,11 @@ figcaption {
   padding: 0.5em 0 0;
 }
 figcaption::before {
-  content: "â†‘ ";
+  content: "→ ";
 }
 figcaption:empty { display: none;}
 
-/* largeur et dÃ©calage des .figure et .videofigure, uniquement pour la version Ã©cran */
+/* largeur et décalage des .figure et .videofigure, uniquement pour la version écran */
 .screen .figure,
 .screen .videofigure  {
   grid-column: var(--col, auto) / span var(--width, 3);
@@ -106,11 +132,11 @@ figcaption:empty { display: none;}
     flex-direction: column-reverse;
   }
   figcaption::before {
-    content: "â†“ " !important;
+    content: "↑ " !important;
   }
 }
 
-/* notwhite has a greu background */
+/* notwhite has a grey background */
 .notwhite {
   background: rgba(0, 0, 0, 0.05);
 }
@@ -121,7 +147,6 @@ figcaption:empty { display: none;}
 .notwhite figcaption {
   background: white; 
 }
-
 
 /* ------------------------------------------------------------------------ Videos */
 .video {

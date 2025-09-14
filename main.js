@@ -55,7 +55,22 @@ var CaptionSettingTab = class extends import_obsidian.PluginSettingTab {
 var filenamePlaceholder = "%";
 var filenameExtensionPlaceholder = "%.%";
 var ImageCaptions = class extends import_obsidian2.Plugin {
+  constructor() {
+    super(...arguments);
+    // New processor for figure-grid-container code blocks
+    this.figureGridProcessor = (source, el, ctx) => {
+      const container = el.createDiv({ cls: "figure-grid-container" });
+      const lines = source.trim().split("\n");
+      lines.forEach(async (line) => {
+        const trimmedLine = line.trim();
+        if (trimmedLine && trimmedLine.startsWith("![[")) {
+          await this.processGridImage(trimmedLine, container, ctx.sourcePath);
+        }
+      });
+    };
+  }
   async onload() {
+    this.registerMarkdownCodeBlockProcessor("figure-grid-container", this.figureGridProcessor.bind(this));
     this.registerMarkdownPostProcessor(
       this.externalImageProcessor()
     );
@@ -101,6 +116,17 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       subtree: true,
       childList: true
     });
+  }
+  async processGridImage(imageSyntax, container, sourcePath) {
+    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|([^\]]+))?\]\]/);
+    if (!match) return;
+    const imagePath = match[1];
+    const params = match[3] || "";
+    const img = container.createEl("img");
+    img.src = this.app.vault.adapter.getResourcePath(imagePath);
+    img.setAttribute("alt", params);
+    const parsedData = this.parseImageData(img);
+    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
   }
   parseImageData(img) {
     let altText = img.getAttribute("alt") || "";
