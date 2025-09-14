@@ -120,10 +120,16 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   async processGridImage(imageSyntax, container, sourcePath) {
     const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
     if (!match) return;
-    const imagePath = match[1];
+    let imagePath = match[1];
     const params = match[3] || "";
+    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
+    if (!abstractFile) {
+      console.error("Fichier introuvable :", imagePath);
+      return;
+    }
+    const resolvedPath = this.app.vault.getResourcePath(abstractFile);
     const img = container.createEl("img");
-    img.src = this.app.vault.adapter.getResourcePath(imagePath);
+    img.src = resolvedPath;
     img.setAttribute("alt", params);
     const parsedData = this.parseImageData(img);
     await this.insertFigureWithCaption(img, container, parsedData, sourcePath);

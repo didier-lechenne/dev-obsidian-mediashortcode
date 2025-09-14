@@ -80,24 +80,29 @@ export default class ImageCaptions extends Plugin {
   }
 
 async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: string) {
-    // Nouvelle regex pour capturer le chemin et tous les paramètres
     const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
     if (!match) return;
 
-    const imagePath = match[1];
-    const params = match[3] || ''; // Tous les paramètres après le premier `|`
+    let imagePath = match[1];
+    const params = match[3] || '';
 
-    // Crée l'élément img
+    // Résous le chemin comme un wikilink
+    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
+    if (!abstractFile) {
+        console.error("Fichier introuvable :", imagePath);
+        return;
+    }
+
+    // Utilise le chemin résolu par Obsidian
+    const resolvedPath = this.app.vault.getResourcePath(abstractFile);
     const img = container.createEl('img');
-    img.src = this.app.vault.adapter.getResourcePath(imagePath);
-    img.setAttribute('alt', params); // Passe les paramètres à alt
+    img.src = resolvedPath;
+    img.setAttribute('alt', params);
 
-    // Analyse les données de l'image
     const parsedData = this.parseImageData(img);
-
-    // Insère la figure avec la légende
     await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
 }
+
 
 
   parseImageData(img: HTMLElement | Element) {
