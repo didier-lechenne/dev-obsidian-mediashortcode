@@ -230,6 +230,11 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
     var _a, _b, _c;
     let container;
+    if (parsedData.caption) {
+      imageEl.setAttribute("alt", parsedData.caption);
+    } else {
+      imageEl.removeAttribute("alt");
+    }
     if (parsedData.dataNom === "imagenote") {
       container = outerEl.createEl("span");
       container.addClass("imagenote");
