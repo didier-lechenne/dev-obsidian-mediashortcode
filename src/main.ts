@@ -19,245 +19,46 @@ export default class ImageCaptions extends Plugin {
     this.observer = new MutationObserver((mutations: MutationRecord[]) => {
       mutations.forEach((rec: MutationRecord) => {
         if (rec.type === 'childList') {
-          // Intercepter les div.image-embed d'Obsidian et les remplacer
           (<Element>rec.target)
-            .querySelectorAll('.internal-embed.image-embed')
-            .forEach(async embedDiv => {
-              await this.replaceObsidianEmbed(embedDiv);
-            });
+            .querySelectorAll('.image-embed, .video-embed')
+            .forEach(async (imageEmbedContainer) => {
+              const img = imageEmbedContainer.querySelector('img, video')
+              const width = imageEmbedContainer.getAttribute('width') || ''
+              const parsedData = this.parseImageData(imageEmbedContainer)
+
+              if (parsedData.caption) {
+                imageEmbedContainer.setAttribute('alt', parsedData.caption);
+              }
+
+              if (!img) return
+              const figure = imageEmbedContainer.querySelector('figure')
+              const figCaption = imageEmbedContainer.querySelector('figcaption')
+              if (figure || img.parentElement?.nodeName === 'FIGURE') {
+                if (figCaption && parsedData.caption) {
+                  const children = await renderMarkdown(parsedData.caption, '', this) ?? [parsedData.caption]
+                  figCaption.replaceChildren(...children)
+                } else if (!parsedData.caption) {
+                  imageEmbedContainer.appendChild(img)
+                  figure?.remove()
+                }
+              } else {
+                if (parsedData.caption && parsedData.caption !== imageEmbedContainer.getAttribute('src')) {
+                  await this.insertFigureWithCaption(img as HTMLElement, imageEmbedContainer, parsedData, '')
+                }
+              }
+              if (width) {
+                img.setAttribute('width', width)
+              } else {
+                img.removeAttribute('width')
+              }
+            })
         }
-      });
-    });
-    
+      })
+    })
     this.observer.observe(document.body, {
       subtree: true,
       childList: true
-    });
-  }
-
-  async replaceObsidianEmbed(embedDiv: Element) {
-    const img = embedDiv.querySelector('img, video') as HTMLElement;
-    if (!img) return;
-    
-    const parsedData = this.parseImageData(embedDiv);
-    const parent = embedDiv.parentElement;
-    if (!parent) return;
-    
-    // Chercher un conteneur grid existant dans le parent
-    let gridContainer = parent.querySelector('.figure-grid-container');
-    
-    if (!gridContainer) {
-      // Créer le conteneur grid seulement s'il n'existe pas
-      gridContainer = parent.createEl('div', { cls: 'figure-grid-container' });
-      
-      // Insérer avant le premier div d'Obsidian
-      const firstEmbed = parent.querySelector('.internal-embed.image-embed');
-      if (firstEmbed) {
-        parent.insertBefore(gridContainer, firstEmbed);
-      }
-    }
-    
-    // Déplacer l'image vers le conteneur grid
-    gridContainer.appendChild(img);
-    
-    // Créer la figure
-    await this.createFigureInGrid(img, parsedData);
-    
-    // Supprimer le div d'Obsidian
-    embedDiv.remove();
-  }
-
-  async processNewImages(container: Element) {
-    const images = container.querySelectorAll('img:not(.emoji), video');
-    
-    if (images.length === 0) return;
-    
-    // Créer le conteneur grid
-    const gridContainer = container.createEl('div', { cls: 'figure-grid-container' });
-    
-    // Traiter chaque image
-    images.forEach(async img => {
-      const parsedData = this.parseImageData(img);
-      
-      if (parsedData.caption || parsedData.dataNom !== 'image' || parsedData.width || parsedData.class.length > 0) {
-        // Déplacer l'image vers le conteneur grid
-        gridContainer.appendChild(img);
-        
-        // Créer la figure
-        await this.createFigureInGrid(img as HTMLElement, parsedData);
-      }
-    });
-    
-    // Si le conteneur grid est vide, le supprimer
-    if (gridContainer.children.length === 0) {
-      gridContainer.remove();
-    }
-  }
-
-  async processGridContainer(container: Element) {
-    const images = container.querySelectorAll('img:not(.emoji), video');
-    
-    images.forEach(async img => {
-      const parsedData = this.parseImageData(img);
-      
-      // Si l'image n'est pas encore dans une figure, la traiter
-      if (!img.closest('figure') && !img.closest('.imagenote')) {
-        await this.createFigureInGrid(img as HTMLElement, parsedData);
-      }
-    });
-  }
-
-  async createFigureInGrid(imageEl: HTMLElement, parsedData: any) {
-    const container = imageEl.parentElement;
-    if (!container) return;
-
-    let figure: HTMLElement;
-
-    if (parsedData.dataNom === 'imagenote') {
-      figure = container.createEl('span', { cls: 'imagenote' });
-      figure.setAttribute('id', parsedData.id);
-      figure.setAttribute('data-src', imageEl.getAttribute('src') || '');
-      
-      if (parsedData.class?.length > 0) {
-        parsedData.class.forEach((cls: string) => figure.addClass(cls));
-      }
-      
-      // Remplacer l'image par la figure
-      container.replaceChild(figure, imageEl);
-      figure.appendChild(imageEl);
-      
-      if (parsedData.caption) {
-        const captionSpan = figure.createEl('span', { cls: 'caption' });
-        const children = await renderMarkdown(parsedData.caption, '', this) ?? [parsedData.caption];
-        captionSpan.replaceChildren(...children);
-      }
-    } else {
-      figure = container.createEl('figure', { cls: 'figure' });
-      figure.setAttribute('data-nom', parsedData.dataNom);
-      figure.setAttribute('id', parsedData.id);
-      
-      // Ajouter les classes et styles CSS
-      if (parsedData.class?.length > 0) {
-        parsedData.class.forEach((cls: string) => figure.addClass(cls));
-      }
-      
-      const style: string[] = [];
-      if (parsedData.width) style.push(`--width: ${parsedData.width}`);
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
-      if (parsedData.col) style.push(`--col: ${parsedData.col}`);
-      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
-      
-      if (style.length > 0) {
-        figure.setAttribute('style', style.join('; '));
-      }
-      
-      // Remplacer l'image par la figure
-      container.replaceChild(figure, imageEl);
-      figure.appendChild(imageEl);
-      
-      if (parsedData.caption) {
-        const children = await renderMarkdown(parsedData.caption, '', this) ?? [parsedData.caption];
-        figure.createEl('figcaption', { cls: 'figcaption' }).replaceChildren(...children);
-      }
-    }
-  }
-
-  externalImageProcessor(): MarkdownPostProcessor {
-    return (el, ctx) => {
-      // Grouper toutes les images avec propriétés dans un seul conteneur
-      const imagesToProcess: HTMLElement[] = [];
-      
-      el.findAll('img:not(.emoji), video').forEach(img => {
-        const parsedData = this.parseImageData(img);
-        if (parsedData.caption || parsedData.dataNom !== 'image' || parsedData.width || parsedData.class.length > 0) {
-          imagesToProcess.push(img);
-        }
-      });
-      
-      if (imagesToProcess.length > 0) {
-        // Créer UN SEUL conteneur grid pour toutes les images
-        const gridContainer = el.createEl('div', { cls: 'figure-grid-container' });
-        
-        // Traiter toutes les images dans le même conteneur
-        imagesToProcess.forEach(async img => {
-          const parsedData = this.parseImageData(img);
-          
-          // Déplacer l'image vers le conteneur unique
-          gridContainer.appendChild(img);
-          
-          // Créer la figure
-          await this.createFigureInGrid(img, parsedData);
-        });
-      }
-    };
-  }
-
-  createGridContainers(container: Element) {
-    // Traiter toutes les images, pas seulement dans les paragraphes
-    const images = Array.from(container.querySelectorAll('img:not(.emoji), video'));
-    
-    // Grouper les images consécutives
-    let currentGroup: HTMLElement[] = [];
-    let allGroups: HTMLElement[][] = [];
-    
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i] as HTMLElement;
-      const parsedData = this.parseImageData(img);
-      
-      // Ajouter à un groupe si l'image a des propriétés spéciales
-      if (parsedData.caption || parsedData.dataNom !== 'image' || parsedData.width || parsedData.class.length > 0) {
-        currentGroup.push(img);
-      } else {
-        // Finaliser le groupe actuel s'il existe
-        if (currentGroup.length > 0) {
-          allGroups.push([...currentGroup]);
-          currentGroup = [];
-        }
-      }
-    }
-    
-    // Ajouter le dernier groupe
-    if (currentGroup.length > 0) {
-      allGroups.push(currentGroup);
-    }
-    
-    // Créer les conteneurs pour chaque groupe
-    allGroups.forEach(group => {
-      if (group.length > 0) {
-        const firstImg = group[0];
-        const parent = firstImg.parentElement;
-        if (!parent) return;
-        
-        // Créer le conteneur grid
-        const gridContainer = parent.createEl('div', { cls: 'figure-grid-container' });
-        
-        // Insérer avant la première image
-        parent.insertBefore(gridContainer, firstImg);
-        
-        // Déplacer toutes les images du groupe
-        group.forEach(img => {
-          gridContainer.appendChild(img);
-        });
-      }
-    });
-  }
-
-  async processStandaloneImage(img: HTMLElement) {
-    const parsedData = this.parseImageData(img);
-    const parent = img.parentElement;
-    
-    if (parent && (parsedData.caption || parsedData.dataNom !== 'image') && !img.closest('figure') && !img.closest('.imagenote')) {
-      // Créer un conteneur grid pour l'image standalone
-      const gridContainer = parent.createEl('div', { cls: 'figure-grid-container' });
-      parent.insertBefore(gridContainer, img);
-      gridContainer.appendChild(img);
-      
-      // Traiter l'image dans son nouveau conteneur
-      await this.createFigureInGrid(img, parsedData);
-    }
+    })
   }
 
   parseImageData(img: HTMLElement | Element) {
@@ -354,25 +155,173 @@ export default class ImageCaptions extends Plugin {
       .replace(/^-|-$/g, '')
   }
 
-  getCaptionText(img: HTMLElement | Element) {
+  getCaptionText (img: HTMLElement | Element) {
     const parsedData = this.parseImageData(img)
     return parsedData.caption
   }
 
-  async loadSettings() {
+  externalImageProcessor (): MarkdownPostProcessor {
+    return (el, ctx) => {
+      el.findAll('img:not(.emoji), video')
+        .forEach(async img => {
+          const parsedData = this.parseImageData(img)
+          const parent = img.parentElement
+          if (parent && parent?.nodeName !== 'FIGURE' && parsedData.caption && parsedData.caption !== img.getAttribute('src')) {
+            await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath)
+          }
+        })
+    }
+  }
+
+  async insertFigureWithCaption (imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
+    let container: HTMLElement
+
+    if (parsedData.caption) {
+      imageEl.setAttribute('alt', parsedData.caption);
+    } else {
+      imageEl.removeAttribute('alt');
+    }
+
+    if (parsedData.dataNom === 'imagenote') {
+      container = outerEl.createEl('span')
+      container.addClass('imagenote')
+      container.setAttribute('id', parsedData.id)
+      container.setAttribute('data-src', imageEl.getAttribute('src') || '')
+      
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      container.appendChild(imageEl)
+      
+      if (parsedData.caption) {
+        const captionSpan = container.createEl('span', { cls: 'caption' })
+        const children = await renderMarkdown(parsedData.caption, sourcePath, this) ?? [parsedData.caption]
+        captionSpan.replaceChildren(...children)
+      }
+    } else if (parsedData.dataNom === 'video') {
+      container = outerEl.createEl('figure')
+      container.addClass('videofigure')
+      container.setAttribute('data-src', imageEl.getAttribute('src') || '')
+      
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      const style: string[] = []
+      if (parsedData.width) style.push(`--width: ${parsedData.width}`)
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`)
+      if (parsedData.col) style.push(`--col: ${parsedData.col}`)
+      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`)
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`)
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`)
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`)
+      
+      if (style.length > 0) {
+        container.setAttribute('style', style.join('; '))
+      }
+      
+      const videoDiv = container.createEl('div', { cls: 'video' })
+      if (parsedData.poster) {
+        videoDiv.setAttribute('style', `background-image: url(${parsedData.poster})`)
+      }
+      
+      const src = imageEl.getAttribute('src') || ''
+      const videoContent = this.createVideoContent(src)
+      if (videoContent) {
+        videoDiv.innerHTML = videoContent
+      } else {
+        videoDiv.appendChild(imageEl)
+      }
+      
+      if (parsedData.caption) {
+        const children = await renderMarkdown(parsedData.caption, sourcePath, this) ?? [parsedData.caption]
+        container.createEl('figcaption', {
+          cls: 'figcaption'
+        }).replaceChildren(...children)
+      }
+    } else {
+      container = outerEl.createEl('figure')
+      container.addClass('figure')
+      container.setAttribute('data-nom', parsedData.dataNom)
+      container.setAttribute('id', parsedData.id)
+      
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      const style: string[] = []
+      if (parsedData.width) style.push(`--width: ${parsedData.width}`)
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`)
+      if (parsedData.col) style.push(`--col: ${parsedData.col}`)
+      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`)
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`)
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`)
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`)
+      
+      if (style.length > 0) {
+        container.setAttribute('style', style.join('; '))
+      }
+      
+      if (parsedData.poster && imageEl.tagName.toLowerCase() === 'video') {
+        imageEl.setAttribute('poster', parsedData.poster)
+      }
+      
+      container.appendChild(imageEl)
+      
+      if (parsedData.caption) {
+        const children = await renderMarkdown(parsedData.caption, sourcePath, this) ?? [parsedData.caption]
+        container.createEl('figcaption', {
+          cls: 'figcaption'
+        }).replaceChildren(...children)
+      }
+    }
+  }
+
+  createVideoContent(url: string): string | null {
+    if (url.includes('yout')) {
+      return this.createYouTubeEmbed(url)
+    }
+    if (url.includes('vimeo')) {
+      return this.createVimeoEmbed(url)
+    }
+    return null
+  }
+
+  createYouTubeEmbed(url: string): string | null {
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/)
+    if (!match) return null
+    
+    const videoId = match[1]
+    const src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`
+    
+    return `<youtube-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></youtube-embed>`
+  }
+
+  createVimeoEmbed(url: string): string | null {
+    const match = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/)
+    if (!match) return null
+    
+    const videoId = match[1]
+    const src = `https://player.vimeo.com/video/${videoId}?autoplay=1&rel=0`
+    
+    return `<vimeo-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></vimeo-embed>`
+  }
+
+  async loadSettings () {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData())
   }
 
-  async saveSettings() {
+  async saveSettings () {
     await this.saveData(this.settings)
   }
 
-  onunload() {
+  onunload () {
     this.observer.disconnect()
   }
 }
 
-export async function renderMarkdown(markdown: string, sourcePath: string, component: Component): Promise<NodeList | undefined> {
+export async function renderMarkdown (markdown: string, sourcePath: string, component: Component): Promise<NodeList | undefined> {
   const el = createDiv()
   await MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, component)
   for (const child of el.children) {

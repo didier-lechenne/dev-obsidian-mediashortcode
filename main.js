@@ -64,8 +64,35 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     this.observer = new MutationObserver((mutations) => {
       mutations.forEach((rec) => {
         if (rec.type === "childList") {
-          rec.target.querySelectorAll(".internal-embed.image-embed").forEach(async (embedDiv) => {
-            await this.replaceObsidianEmbed(embedDiv);
+          rec.target.querySelectorAll(".image-embed, .video-embed").forEach(async (imageEmbedContainer) => {
+            var _a, _b;
+            const img = imageEmbedContainer.querySelector("img, video");
+            const width = imageEmbedContainer.getAttribute("width") || "";
+            const parsedData = this.parseImageData(imageEmbedContainer);
+            if (parsedData.caption) {
+              imageEmbedContainer.setAttribute("alt", parsedData.caption);
+            }
+            if (!img) return;
+            const figure = imageEmbedContainer.querySelector("figure");
+            const figCaption = imageEmbedContainer.querySelector("figcaption");
+            if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
+              if (figCaption && parsedData.caption) {
+                const children = (_b = await renderMarkdown(parsedData.caption, "", this)) != null ? _b : [parsedData.caption];
+                figCaption.replaceChildren(...children);
+              } else if (!parsedData.caption) {
+                imageEmbedContainer.appendChild(img);
+                figure == null ? void 0 : figure.remove();
+              }
+            } else {
+              if (parsedData.caption && parsedData.caption !== imageEmbedContainer.getAttribute("src")) {
+                await this.insertFigureWithCaption(img, imageEmbedContainer, parsedData, "");
+              }
+            }
+            if (width) {
+              img.setAttribute("width", width);
+            } else {
+              img.removeAttribute("width");
+            }
           });
         }
       });
@@ -74,154 +101,6 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       subtree: true,
       childList: true
     });
-  }
-  async replaceObsidianEmbed(embedDiv) {
-    const img = embedDiv.querySelector("img, video");
-    if (!img) return;
-    const parsedData = this.parseImageData(embedDiv);
-    const parent = embedDiv.parentElement;
-    if (!parent) return;
-    let gridContainer = parent.querySelector(".figure-grid-container");
-    if (!gridContainer) {
-      gridContainer = parent.createEl("div", { cls: "figure-grid-container" });
-      const firstEmbed = parent.querySelector(".internal-embed.image-embed");
-      if (firstEmbed) {
-        parent.insertBefore(gridContainer, firstEmbed);
-      }
-    }
-    gridContainer.appendChild(img);
-    await this.createFigureInGrid(img, parsedData);
-    embedDiv.remove();
-  }
-  async processNewImages(container) {
-    const images = container.querySelectorAll("img:not(.emoji), video");
-    if (images.length === 0) return;
-    const gridContainer = container.createEl("div", { cls: "figure-grid-container" });
-    images.forEach(async (img) => {
-      const parsedData = this.parseImageData(img);
-      if (parsedData.caption || parsedData.dataNom !== "image" || parsedData.width || parsedData.class.length > 0) {
-        gridContainer.appendChild(img);
-        await this.createFigureInGrid(img, parsedData);
-      }
-    });
-    if (gridContainer.children.length === 0) {
-      gridContainer.remove();
-    }
-  }
-  async processGridContainer(container) {
-    const images = container.querySelectorAll("img:not(.emoji), video");
-    images.forEach(async (img) => {
-      const parsedData = this.parseImageData(img);
-      if (!img.closest("figure") && !img.closest(".imagenote")) {
-        await this.createFigureInGrid(img, parsedData);
-      }
-    });
-  }
-  async createFigureInGrid(imageEl, parsedData) {
-    var _a, _b, _c, _d;
-    const container = imageEl.parentElement;
-    if (!container) return;
-    let figure;
-    if (parsedData.dataNom === "imagenote") {
-      figure = container.createEl("span", { cls: "imagenote" });
-      figure.setAttribute("id", parsedData.id);
-      figure.setAttribute("data-src", imageEl.getAttribute("src") || "");
-      if (((_a = parsedData.class) == null ? void 0 : _a.length) > 0) {
-        parsedData.class.forEach((cls) => figure.addClass(cls));
-      }
-      container.replaceChild(figure, imageEl);
-      figure.appendChild(imageEl);
-      if (parsedData.caption) {
-        const captionSpan = figure.createEl("span", { cls: "caption" });
-        const children = (_b = await renderMarkdown(parsedData.caption, "", this)) != null ? _b : [parsedData.caption];
-        captionSpan.replaceChildren(...children);
-      }
-    } else {
-      figure = container.createEl("figure", { cls: "figure" });
-      figure.setAttribute("data-nom", parsedData.dataNom);
-      figure.setAttribute("id", parsedData.id);
-      if (((_c = parsedData.class) == null ? void 0 : _c.length) > 0) {
-        parsedData.class.forEach((cls) => figure.addClass(cls));
-      }
-      const style = [];
-      if (parsedData.width) style.push(`--width: ${parsedData.width}`);
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
-      if (parsedData.col) style.push(`--col: ${parsedData.col}`);
-      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
-      if (style.length > 0) {
-        figure.setAttribute("style", style.join("; "));
-      }
-      container.replaceChild(figure, imageEl);
-      figure.appendChild(imageEl);
-      if (parsedData.caption) {
-        const children = (_d = await renderMarkdown(parsedData.caption, "", this)) != null ? _d : [parsedData.caption];
-        figure.createEl("figcaption", { cls: "figcaption" }).replaceChildren(...children);
-      }
-    }
-  }
-  externalImageProcessor() {
-    return (el, ctx) => {
-      const imagesToProcess = [];
-      el.findAll("img:not(.emoji), video").forEach((img) => {
-        const parsedData = this.parseImageData(img);
-        if (parsedData.caption || parsedData.dataNom !== "image" || parsedData.width || parsedData.class.length > 0) {
-          imagesToProcess.push(img);
-        }
-      });
-      if (imagesToProcess.length > 0) {
-        const gridContainer = el.createEl("div", { cls: "figure-grid-container" });
-        imagesToProcess.forEach(async (img) => {
-          const parsedData = this.parseImageData(img);
-          gridContainer.appendChild(img);
-          await this.createFigureInGrid(img, parsedData);
-        });
-      }
-    };
-  }
-  createGridContainers(container) {
-    const images = Array.from(container.querySelectorAll("img:not(.emoji), video"));
-    let currentGroup = [];
-    let allGroups = [];
-    for (let i = 0; i < images.length; i++) {
-      const img = images[i];
-      const parsedData = this.parseImageData(img);
-      if (parsedData.caption || parsedData.dataNom !== "image" || parsedData.width || parsedData.class.length > 0) {
-        currentGroup.push(img);
-      } else {
-        if (currentGroup.length > 0) {
-          allGroups.push([...currentGroup]);
-          currentGroup = [];
-        }
-      }
-    }
-    if (currentGroup.length > 0) {
-      allGroups.push(currentGroup);
-    }
-    allGroups.forEach((group) => {
-      if (group.length > 0) {
-        const firstImg = group[0];
-        const parent = firstImg.parentElement;
-        if (!parent) return;
-        const gridContainer = parent.createEl("div", { cls: "figure-grid-container" });
-        parent.insertBefore(gridContainer, firstImg);
-        group.forEach((img) => {
-          gridContainer.appendChild(img);
-        });
-      }
-    });
-  }
-  async processStandaloneImage(img) {
-    const parsedData = this.parseImageData(img);
-    const parent = img.parentElement;
-    if (parent && (parsedData.caption || parsedData.dataNom !== "image") && !img.closest("figure") && !img.closest(".imagenote")) {
-      const gridContainer = parent.createEl("div", { cls: "figure-grid-container" });
-      parent.insertBefore(gridContainer, img);
-      gridContainer.appendChild(img);
-      await this.createFigureInGrid(img, parsedData);
-    }
   }
   parseImageData(img) {
     let altText = img.getAttribute("alt") || "";
@@ -320,6 +199,128 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   getCaptionText(img) {
     const parsedData = this.parseImageData(img);
     return parsedData.caption;
+  }
+  externalImageProcessor() {
+    return (el, ctx) => {
+      el.findAll("img:not(.emoji), video").forEach(async (img) => {
+        const parsedData = this.parseImageData(img);
+        const parent = img.parentElement;
+        if (parent && (parent == null ? void 0 : parent.nodeName) !== "FIGURE" && parsedData.caption && parsedData.caption !== img.getAttribute("src")) {
+          await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath);
+        }
+      });
+    };
+  }
+  async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
+    var _a, _b, _c;
+    let container;
+    if (parsedData.caption) {
+      imageEl.setAttribute("alt", parsedData.caption);
+    } else {
+      imageEl.removeAttribute("alt");
+    }
+    if (parsedData.dataNom === "imagenote") {
+      container = outerEl.createEl("span");
+      container.addClass("imagenote");
+      container.setAttribute("id", parsedData.id);
+      container.setAttribute("data-src", imageEl.getAttribute("src") || "");
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls) => container.addClass(cls));
+      }
+      container.appendChild(imageEl);
+      if (parsedData.caption) {
+        const captionSpan = container.createEl("span", { cls: "caption" });
+        const children = (_a = await renderMarkdown(parsedData.caption, sourcePath, this)) != null ? _a : [parsedData.caption];
+        captionSpan.replaceChildren(...children);
+      }
+    } else if (parsedData.dataNom === "video") {
+      container = outerEl.createEl("figure");
+      container.addClass("videofigure");
+      container.setAttribute("data-src", imageEl.getAttribute("src") || "");
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls) => container.addClass(cls));
+      }
+      const style = [];
+      if (parsedData.width) style.push(`--width: ${parsedData.width}`);
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
+      if (parsedData.col) style.push(`--col: ${parsedData.col}`);
+      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
+      if (style.length > 0) {
+        container.setAttribute("style", style.join("; "));
+      }
+      const videoDiv = container.createEl("div", { cls: "video" });
+      if (parsedData.poster) {
+        videoDiv.setAttribute("style", `background-image: url(${parsedData.poster})`);
+      }
+      const src = imageEl.getAttribute("src") || "";
+      const videoContent = this.createVideoContent(src);
+      if (videoContent) {
+        videoDiv.innerHTML = videoContent;
+      } else {
+        videoDiv.appendChild(imageEl);
+      }
+      if (parsedData.caption) {
+        const children = (_b = await renderMarkdown(parsedData.caption, sourcePath, this)) != null ? _b : [parsedData.caption];
+        container.createEl("figcaption", {
+          cls: "figcaption"
+        }).replaceChildren(...children);
+      }
+    } else {
+      container = outerEl.createEl("figure");
+      container.addClass("figure");
+      container.setAttribute("data-nom", parsedData.dataNom);
+      container.setAttribute("id", parsedData.id);
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls) => container.addClass(cls));
+      }
+      const style = [];
+      if (parsedData.width) style.push(`--width: ${parsedData.width}`);
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
+      if (parsedData.col) style.push(`--col: ${parsedData.col}`);
+      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
+      if (style.length > 0) {
+        container.setAttribute("style", style.join("; "));
+      }
+      if (parsedData.poster && imageEl.tagName.toLowerCase() === "video") {
+        imageEl.setAttribute("poster", parsedData.poster);
+      }
+      container.appendChild(imageEl);
+      if (parsedData.caption) {
+        const children = (_c = await renderMarkdown(parsedData.caption, sourcePath, this)) != null ? _c : [parsedData.caption];
+        container.createEl("figcaption", {
+          cls: "figcaption"
+        }).replaceChildren(...children);
+      }
+    }
+  }
+  createVideoContent(url) {
+    if (url.includes("yout")) {
+      return this.createYouTubeEmbed(url);
+    }
+    if (url.includes("vimeo")) {
+      return this.createVimeoEmbed(url);
+    }
+    return null;
+  }
+  createYouTubeEmbed(url) {
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/);
+    if (!match) return null;
+    const videoId = match[1];
+    const src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
+    return `<youtube-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></youtube-embed>`;
+  }
+  createVimeoEmbed(url) {
+    const match = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/);
+    if (!match) return null;
+    const videoId = match[1];
+    const src = `https://player.vimeo.com/video/${videoId}?autoplay=1&rel=0`;
+    return `<vimeo-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></vimeo-embed>`;
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
