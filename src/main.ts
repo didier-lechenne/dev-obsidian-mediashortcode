@@ -33,7 +33,7 @@ export default class ImageCaptions extends Plugin {
               if (parsedData.caption) {
                 imageEmbedContainer.setAttribute('alt', parsedData.caption);
               }
-              
+
               if (!img) return
               const figure = imageEmbedContainer.querySelector('figure')
               const figCaption = imageEmbedContainer.querySelector('figcaption')
@@ -244,13 +244,13 @@ export default class ImageCaptions extends Plugin {
       }
       
       const style: string[] = []
-      if (parsedData.width) style.push(`--width: ${parsedData.width}px`)
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}px`)
-      if (parsedData.col) style.push(`--columns: ${parsedData.col}`)
-      if (parsedData.printcol) style.push(`--print-columns: ${parsedData.printcol}`)
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}px`)
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}px`)
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}px`)
+      if (parsedData.width) style.push(`--width: ${parsedData.width}`)
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`)
+      if (parsedData.col) style.push(`--col: ${parsedData.col}`)
+      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`)
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`)
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`)
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`)
       
       if (style.length > 0) {
         container.setAttribute('style', style.join('; '))
@@ -291,13 +291,13 @@ export default class ImageCaptions extends Plugin {
       
       // Set CSS custom properties
       const style: string[] = []
-      if (parsedData.width) style.push(`--width: ${parsedData.width}px`)
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}px`)
-      if (parsedData.col) style.push(`--columns: ${parsedData.col}`)
-      if (parsedData.printcol) style.push(`--print-columns: ${parsedData.printcol}`)
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}px`)
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}px`)
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}px`)
+      if (parsedData.width) style.push(`--width: ${parsedData.width}`)
+      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`)
+      if (parsedData.col) style.push(`--col: ${parsedData.col}`)
+      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`)
+      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`)
+      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`)
+      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`)
       
       if (style.length > 0) {
         container.setAttribute('style', style.join('; '))
