@@ -3,6 +3,7 @@ import {
   MarkdownPostProcessor,
   MarkdownRenderer,
   Plugin,
+  TFile,
 } from "obsidian";
 import {
   CaptionSettings,
@@ -411,7 +412,7 @@ export default class ImageCaptions extends Plugin {
   externalImageProcessor(): MarkdownPostProcessor {
     return (el, ctx) => {
       el.findAll("img:not(.emoji), video").forEach(async (img) => {
-        const parsedData = this.parseImageData(img);
+        const parsedData = await this.parseImageDataFromContext(img, ctx);
         const parent = img.parentElement;
         if (
           parent &&
@@ -428,6 +429,37 @@ export default class ImageCaptions extends Plugin {
         }
       });
     };
+  }
+
+  async parseImageDataFromContext(img: HTMLElement, ctx: any) {
+    try {
+      const src = img.getAttribute('src');
+      const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
+      if (!src || !file) return this.parseImageData(img);
+      
+      const content = await this.app.vault.read(file as TFile);
+      const filename = src.split('/').pop()?.split('?')[0];
+      if (!filename) return this.parseImageData(img);
+      
+      const wikilinks = this.extractWikilinks(content);
+      const matchingWikilink = wikilinks.find(link => 
+        link.includes(filename) || link.includes(src)
+      );
+      
+      if (matchingWikilink) {
+        const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
+        if (match) {
+          const tempImg = document.createElement('img');
+          tempImg.setAttribute('alt', match[2] || '');
+          tempImg.setAttribute('src', src);
+          return this.parseImageData(tempImg);
+        }
+      }
+      
+      return this.parseImageData(img);
+    } catch {
+      return this.parseImageData(img);
+    }
   }
 
   async insertFigureWithCaption(

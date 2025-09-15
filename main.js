@@ -381,7 +381,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   externalImageProcessor() {
     return (el, ctx) => {
       el.findAll("img:not(.emoji), video").forEach(async (img) => {
-        const parsedData = this.parseImageData(img);
+        const parsedData = await this.parseImageDataFromContext(img, ctx);
         const parent = img.parentElement;
         if (parent && (parent == null ? void 0 : parent.nodeName) !== "FIGURE" && parsedData.caption && parsedData.caption !== img.getAttribute("src")) {
           await this.insertFigureWithCaption(
@@ -393,6 +393,33 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         }
       });
     };
+  }
+  async parseImageDataFromContext(img, ctx) {
+    var _a;
+    try {
+      const src = img.getAttribute("src");
+      const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
+      if (!src || !file) return this.parseImageData(img);
+      const content = await this.app.vault.read(file);
+      const filename = (_a = src.split("/").pop()) == null ? void 0 : _a.split("?")[0];
+      if (!filename) return this.parseImageData(img);
+      const wikilinks = this.extractWikilinks(content);
+      const matchingWikilink = wikilinks.find(
+        (link) => link.includes(filename) || link.includes(src)
+      );
+      if (matchingWikilink) {
+        const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
+        if (match) {
+          const tempImg = document.createElement("img");
+          tempImg.setAttribute("alt", match[2] || "");
+          tempImg.setAttribute("src", src);
+          return this.parseImageData(tempImg);
+        }
+      }
+      return this.parseImageData(img);
+    } catch (e) {
+      return this.parseImageData(img);
+    }
   }
   async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
     var _a, _b, _c;
