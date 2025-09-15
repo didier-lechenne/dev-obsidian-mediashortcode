@@ -171,8 +171,9 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     const resolvedPath = this.app.vault.getResourcePath(abstractFile);
     const img = container.createEl("img");
     img.src = resolvedPath;
-    img.setAttribute("alt", params);
-    const parsedData = this.parseImageData(img);
+    const tempImg = { getAttribute: () => params, src: resolvedPath };
+    const parsedData = this.parseImageData(tempImg);
+    img.setAttribute("alt", parsedData.caption || "");
     await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
   }
   async insertFigureWithCaptionSync(imageEl, outerEl, parsedData, sourcePath) {

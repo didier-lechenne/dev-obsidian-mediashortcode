@@ -18,8 +18,6 @@ export default class ImageCaptions extends Plugin {
   observer: MutationObserver;
 
   async onload() {
-
-
     this.registerMarkdownCodeBlockProcessor(
       "columnGrid",
       this.figureGridProcessor.bind(this)
@@ -159,9 +157,14 @@ export default class ImageCaptions extends Plugin {
     const resolvedPath = this.app.vault.getResourcePath(abstractFile);
     const img = container.createEl("img");
     img.src = resolvedPath;
-    img.setAttribute("alt", params);
+    
+    // Pré-parser pour extraire seulement la caption pour l'attribut alt
+    const tempImg = { getAttribute: () => params, src: resolvedPath };
+    const parsedData = this.parseImageData(tempImg as any);
+    
+    // Alt contient seulement la caption
+    img.setAttribute("alt", parsedData.caption || "");
 
-    const parsedData = this.parseImageData(img);
     await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
   }
 
