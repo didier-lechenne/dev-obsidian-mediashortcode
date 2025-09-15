@@ -68,7 +68,6 @@ export default class ImageCaptions extends Plugin {
           if (figCaption && parsedAlt.caption) {
             const children = await this.renderMarkdown(parsedAlt.caption, "");
 
-            // Extraire le contenu du <p> généré par Obsidian
             if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
               const pElement = children[0] as HTMLParagraphElement;
               figCaption.replaceChildren(...Array.from(pElement.childNodes));
@@ -92,7 +91,7 @@ export default class ImageCaptions extends Plugin {
 
       if (img) {
         const parentFigure = img.closest("figure");
-        if (parentFigure && parsedAlt.class.length > 0) {
+        if (parentFigure && parsedAlt.class && parsedAlt.class.length > 0) {
           parentFigure.classList.value = "figure";
           parsedAlt.class.forEach((cls: string) => parentFigure.classList.add(cls));
         }
@@ -109,7 +108,6 @@ export default class ImageCaptions extends Plugin {
           if (figCaption && parsedData.caption) {
             const children = await this.renderMarkdown(parsedData.caption, "");
 
-            // Extraire le contenu du <p> généré par Obsidian
             if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
               const pElement = children[0] as HTMLParagraphElement;
               figCaption.replaceChildren(...Array.from(pElement.childNodes));
@@ -127,11 +125,17 @@ export default class ImageCaptions extends Plugin {
       caption: "",
       class: [] as string[],
       width: undefined as string | undefined,
+      col: undefined as string | undefined,
+      "print-col": undefined as string | undefined,
+      "print-width": undefined as string | undefined,
+      dataNom: "image" as string,
     };
 
     if (!altText) return result;
 
-    const parts = altText.split("|").map((part) => part.trim());
+    // Nettoyer les sauts de ligne et les espaces inutiles
+    const cleanedAltText = altText.replace(/\s+/g, " ").trim();
+    const parts = cleanedAltText.split("|").map((part) => part.trim());
 
     for (const part of parts) {
       if (part.includes(":")) {
@@ -148,11 +152,22 @@ export default class ImageCaptions extends Plugin {
           case "width":
             result.width = value;
             break;
+          case "col":
+            result.col = value;
+            break;
+          case "print-col":
+            result["print-col"] = value;
+            break;
+          case "print-width":
+            result["print-width"] = value;
+            break;
+          case "type":
+          case "datanom":
+            result.dataNom = value;
+            break;
         }
-      } else {
-        if (!result.caption) {
-          result.caption = part;
-        }
+      } else if (part && !result.caption) {
+        result.caption = part;
       }
     }
 
@@ -184,16 +199,20 @@ export default class ImageCaptions extends Plugin {
       parsedData.class.forEach((cls: string) => container.addClass(cls));
     }
 
+    if (parsedData.width) {
+      container.setAttribute("style", `--width: ${parsedData.width}`);
+    }
+
+    if (parsedData.col) {
+      container.setAttribute("style", `--col: ${parsedData.col}`);
+    }
+
     container.appendChild(imageEl);
 
     if (parsedData.caption) {
-      const figcaption = container.createEl("figcaption", {
-        cls: "figcaption",
-      });
-
+      const figcaption = container.createEl("figcaption", { cls: "figcaption" });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
 
-      // Extraire le contenu du <p> généré par Obsidian
       if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
         const pElement = children[0] as HTMLParagraphElement;
         figcaption.replaceChildren(...Array.from(pElement.childNodes));
@@ -223,16 +242,20 @@ export default class ImageCaptions extends Plugin {
       parsedData.class.forEach((cls: string) => container.addClass(cls));
     }
 
+    if (parsedData.width) {
+      container.setAttribute("style", `--width: ${parsedData.width}`);
+    }
+
+    if (parsedData.col) {
+      container.setAttribute("style", `--col: ${parsedData.col}`);
+    }
+
     container.appendChild(imageEl);
 
     if (parsedData.caption) {
-      const figcaption = container.createEl("figcaption", {
-        cls: "figcaption",
-      });
-
+      const figcaption = container.createEl("figcaption", { cls: "figcaption" });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
 
-      // Extraire le contenu du <p> généré par Obsidian
       if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
         const pElement = children[0] as HTMLParagraphElement;
         figcaption.replaceChildren(...Array.from(pElement.childNodes));
@@ -289,11 +312,11 @@ export default class ImageCaptions extends Plugin {
 
   async processGridImageSync(imageSyntax: string, container: HTMLElement, sourcePath: string) {
     const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
-    const match = cleanSyntax.match(/!\[\[([^\|\]]+?)(?:\|([^\]]*?))?\]\]/);
+    const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+?))?\]\]/);
     if (!match) return;
 
     const imagePath = match[1].trim();
-    const params = match[2] || "";
+    const params = match[2] ? match[2].trim() : "";
     const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
     if (!abstractFile) {
       console.warn(`Fichier introuvable : ${imagePath}`);
@@ -372,6 +395,7 @@ export default class ImageCaptions extends Plugin {
     this.observer.disconnect();
   }
 }
+
 
 export async function renderMarkdown(
   markdown: string,

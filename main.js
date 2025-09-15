@@ -125,7 +125,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const img = target.querySelector("img, video");
       if (img) {
         const parentFigure = img.closest("figure");
-        if (parentFigure && parsedAlt.class.length > 0) {
+        if (parentFigure && parsedAlt.class && parsedAlt.class.length > 0) {
           parentFigure.classList.value = "figure";
           parsedAlt.class.forEach((cls) => parentFigure.classList.add(cls));
         }
@@ -154,10 +154,15 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     const result = {
       caption: "",
       class: [],
-      width: void 0
+      width: void 0,
+      col: void 0,
+      "print-col": void 0,
+      "print-width": void 0,
+      dataNom: "image"
     };
     if (!altText) return result;
-    const parts = altText.split("|").map((part) => part.trim());
+    const cleanedAltText = altText.replace(/\s+/g, " ").trim();
+    const parts = cleanedAltText.split("|").map((part) => part.trim());
     for (const part of parts) {
       if (part.includes(":")) {
         const [key, ...valueParts] = part.split(":");
@@ -172,11 +177,22 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
           case "width":
             result.width = value;
             break;
+          case "col":
+            result.col = value;
+            break;
+          case "print-col":
+            result["print-col"] = value;
+            break;
+          case "print-width":
+            result["print-width"] = value;
+            break;
+          case "type":
+          case "datanom":
+            result.dataNom = value;
+            break;
         }
-      } else {
-        if (!result.caption) {
-          result.caption = part;
-        }
+      } else if (part && !result.caption) {
+        result.caption = part;
       }
     }
     return result;
@@ -197,11 +213,15 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     if (parsedData.class && parsedData.class.length > 0) {
       parsedData.class.forEach((cls) => container.addClass(cls));
     }
+    if (parsedData.width) {
+      container.setAttribute("style", `--width: ${parsedData.width}`);
+    }
+    if (parsedData.col) {
+      container.setAttribute("style", `--col: ${parsedData.col}`);
+    }
     container.appendChild(imageEl);
     if (parsedData.caption) {
-      const figcaption = container.createEl("figcaption", {
-        cls: "figcaption"
-      });
+      const figcaption = container.createEl("figcaption", { cls: "figcaption" });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
       if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
         const pElement = children[0];
@@ -223,11 +243,15 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     if (parsedData.class && parsedData.class.length > 0) {
       parsedData.class.forEach((cls) => container.addClass(cls));
     }
+    if (parsedData.width) {
+      container.setAttribute("style", `--width: ${parsedData.width}`);
+    }
+    if (parsedData.col) {
+      container.setAttribute("style", `--col: ${parsedData.col}`);
+    }
     container.appendChild(imageEl);
     if (parsedData.caption) {
-      const figcaption = container.createEl("figcaption", {
-        cls: "figcaption"
-      });
+      const figcaption = container.createEl("figcaption", { cls: "figcaption" });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
       if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
         const pElement = children[0];
@@ -268,10 +292,10 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   }
   async processGridImageSync(imageSyntax, container, sourcePath) {
     const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
-    const match = cleanSyntax.match(/!\[\[([^\|\]]+?)(?:\|([^\]]*?))?\]\]/);
+    const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+?))?\]\]/);
     if (!match) return;
     const imagePath = match[1].trim();
-    const params = match[2] || "";
+    const params = match[2] ? match[2].trim() : "";
     const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
     if (!abstractFile) {
       console.warn(`Fichier introuvable : ${imagePath}`);
