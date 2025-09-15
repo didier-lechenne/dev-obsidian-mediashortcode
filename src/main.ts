@@ -21,7 +21,6 @@ export default class ImageCaptions extends Plugin {
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new CaptionSettingTab(this.app, this));
-
     this.registerMarkdownCodeBlockProcessor(
       "columnGrid",
       this.figureGridProcessor.bind(this)
@@ -68,7 +67,14 @@ export default class ImageCaptions extends Plugin {
         if (figure || img.parentElement?.nodeName === "FIGURE") {
           if (figCaption && parsedAlt.caption) {
             const children = await this.renderMarkdown(parsedAlt.caption, "");
-            figCaption.replaceChildren(...children);
+
+            // Extraire le contenu du <p> généré par Obsidian
+            if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+              const pElement = children[0] as HTMLParagraphElement;
+              figCaption.replaceChildren(...Array.from(pElement.childNodes));
+            } else {
+              figCaption.replaceChildren(...children);
+            }
           }
         } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
           await this.insertFigureWithCaption(img as HTMLElement, embedContainer, parsedAlt, "");
@@ -99,9 +105,17 @@ export default class ImageCaptions extends Plugin {
         if (parent && parent.nodeName === "FIGURE") {
           const figCaption = parent.querySelector("figcaption");
           const parsedData = this.parseImageData(target);
+
           if (figCaption && parsedData.caption) {
             const children = await this.renderMarkdown(parsedData.caption, "");
-            figCaption.replaceChildren(...children);
+
+            // Extraire le contenu du <p> généré par Obsidian
+            if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+              const pElement = children[0] as HTMLParagraphElement;
+              figCaption.replaceChildren(...Array.from(pElement.childNodes));
+            } else {
+              figCaption.replaceChildren(...children);
+            }
           }
         }
       }, 10);
@@ -157,7 +171,6 @@ export default class ImageCaptions extends Plugin {
     sourcePath: string
   ) {
     let container: HTMLElement;
-
     if (parsedData.caption) {
       imageEl.setAttribute("alt", parsedData.caption);
     } else {
@@ -177,8 +190,16 @@ export default class ImageCaptions extends Plugin {
       const figcaption = container.createEl("figcaption", {
         cls: "figcaption",
       });
+
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      figcaption.replaceChildren(...children);
+
+      // Extraire le contenu du <p> généré par Obsidian
+      if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+        const pElement = children[0] as HTMLParagraphElement;
+        figcaption.replaceChildren(...Array.from(pElement.childNodes));
+      } else {
+        figcaption.replaceChildren(...children);
+      }
     }
   }
 
@@ -189,7 +210,6 @@ export default class ImageCaptions extends Plugin {
     sourcePath: string
   ) {
     let container: HTMLElement;
-
     if (parsedData.caption) {
       imageEl.setAttribute("alt", parsedData.caption);
     } else {
@@ -209,7 +229,10 @@ export default class ImageCaptions extends Plugin {
       const figcaption = container.createEl("figcaption", {
         cls: "figcaption",
       });
+
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
+
+      // Extraire le contenu du <p> généré par Obsidian
       if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
         const pElement = children[0] as HTMLParagraphElement;
         figcaption.replaceChildren(...Array.from(pElement.childNodes));

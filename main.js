@@ -105,7 +105,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
         if (figCaption && parsedAlt.caption) {
           const children = await this.renderMarkdown(parsedAlt.caption, "");
-          figCaption.replaceChildren(...children);
+          if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+            const pElement = children[0];
+            figCaption.replaceChildren(...Array.from(pElement.childNodes));
+          } else {
+            figCaption.replaceChildren(...children);
+          }
         }
       } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
         await this.insertFigureWithCaption(img, embedContainer, parsedAlt, "");
@@ -134,7 +139,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
           const parsedData = this.parseImageData(target);
           if (figCaption && parsedData.caption) {
             const children = await this.renderMarkdown(parsedData.caption, "");
-            figCaption.replaceChildren(...children);
+            if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+              const pElement = children[0];
+              figCaption.replaceChildren(...Array.from(pElement.childNodes));
+            } else {
+              figCaption.replaceChildren(...children);
+            }
           }
         }
       }, 10);
@@ -193,7 +203,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         cls: "figcaption"
       });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      figcaption.replaceChildren(...children);
+      if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+        const pElement = children[0];
+        figcaption.replaceChildren(...Array.from(pElement.childNodes));
+      } else {
+        figcaption.replaceChildren(...children);
+      }
     }
   }
   async insertFigureWithCaptionSync(imageEl, outerEl, parsedData, sourcePath) {
