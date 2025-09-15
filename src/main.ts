@@ -64,52 +64,117 @@ export default class ImageCaptions extends Plugin {
     })
   }
 
-  // New processor for figure-grid-container code blocks
+  // CORRECTION: Processor pour les blocs de code figure-grid-container
   figureGridProcessor = (source: string, el: HTMLElement, ctx: any) => {
     const container = el.createDiv({ cls: 'figure-grid-container' })
     
-    // Parse the content inside the code block
     const lines = source.trim().split('\n')
     
+    // Traiter chaque ligne de manière séquentielle pour éviter les problèmes d'async
     lines.forEach(line => {
       const trimmedLine = line.trim()
       if (trimmedLine && trimmedLine.startsWith('![[')) {
-        this.processGridImage(trimmedLine, container, ctx.sourcePath)
+        // Version synchrone pour éviter les problèmes avec forEach + async
+        this.processGridImageSync(trimmedLine, container, ctx.sourcePath)
       }
     })
   }
 
-async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: string) {
-    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
-    if (!match) return;
+  // CORRECTION: Version synchrone pour éviter les problèmes d'async dans forEach
+  processGridImageSync(imageSyntax: string, container: HTMLElement, sourcePath: string) {
+    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/)
+    if (!match) return
 
-    let imagePath = match[1];
-    const params = match[3] || '';
+    const imagePath = match[1]
+    const params = match[3] || ''
 
-    // Résous le chemin comme un wikilink
-    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
+    // Résolution du chemin wikilink
+    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath)
     if (!abstractFile) {
-        console.error("Fichier introuvable :", imagePath);
-        return;
+      console.warn(`Fichier introuvable : ${imagePath}`)
+      return
     }
 
-    // Utilise le chemin résolu par Obsidian
-    const resolvedPath = this.app.vault.getResourcePath(abstractFile);
-    const img = container.createEl('img');
-    img.src = resolvedPath;
-    img.setAttribute('alt', params);
+    const resolvedPath = this.app.vault.getResourcePath(abstractFile)
+    const img = container.createEl('img')
+    img.src = resolvedPath
+    img.setAttribute('alt', params)
 
-    const parsedData = this.parseImageData(img);
-    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
-}
+    const parsedData = this.parseImageData(img)
+    
+    // Traitement synchrone de la figure
+    this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath)
+  }
 
+  // NOUVELLE MÉTHODE: Version synchrone de insertFigureWithCaption pour les grilles
+  insertFigureWithCaptionSync(imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
+    let container: HTMLElement
 
+    if (parsedData.caption) {
+      imageEl.setAttribute('alt', parsedData.caption)
+    } else {
+      imageEl.removeAttribute('alt')
+    }
+
+    if (parsedData.dataNom === 'imagenote') {
+      container = outerEl.createEl('span')
+      container.addClass('imagenote')
+      container.setAttribute('id', parsedData.id)
+      container.setAttribute('data-src', imageEl.getAttribute('src') || '')
+      
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      container.appendChild(imageEl)
+      
+      if (parsedData.caption) {
+        const captionSpan = container.createEl('span', { cls: 'caption' })
+        // Version simplifiée pour éviter async
+        captionSpan.textContent = parsedData.caption
+      }
+    } else {
+      container = outerEl.createEl('figure')
+      container.addClass('figure')
+      container.setAttribute('data-nom', parsedData.dataNom)
+      container.setAttribute('id', parsedData.id)
+      
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls: string) => container.addClass(cls))
+      }
+      
+      this.applyStyleProperties(container, parsedData)
+      
+      container.appendChild(imageEl)
+      
+      if (parsedData.caption) {
+        const figcaption = container.createEl('figcaption', { cls: 'figcaption' })
+        // Version simplifiée pour éviter async
+        figcaption.textContent = parsedData.caption
+      }
+    }
+  }
+
+  // NOUVELLE MÉTHODE: Factorisation des propriétés de style
+  private applyStyleProperties(container: HTMLElement, parsedData: any) {
+    const style: string[] = []
+    if (parsedData.width) style.push(`--width: ${parsedData.width}`)
+    if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`)
+    if (parsedData.col) style.push(`--col: ${parsedData.col}`)
+    if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`)
+    if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`)
+    if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`)
+    if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`)
+    
+    if (style.length > 0) {
+      container.setAttribute('style', style.join('; '))
+    }
+  }
 
   parseImageData(img: HTMLElement | Element) {
     let altText = img.getAttribute('alt') || ''
     const src = img.getAttribute('src') || ''
     
-    // Split by pipe
     const parts = altText.split('|').map(part => part.trim())
     
     const result = {
@@ -171,7 +236,9 @@ async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: 
       try {
         const match = result.caption.match(new RegExp(this.settings.captionRegex))
         result.caption = match?.[1] || ''
-      } catch (e) {}
+      } catch (e) {
+        console.warn('Invalid regex in settings:', this.settings.captionRegex)
+      }
     }
 
     if (result.caption === filenamePlaceholder) {
@@ -221,9 +288,9 @@ async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: 
     let container: HTMLElement
 
     if (parsedData.caption) {
-      imageEl.setAttribute('alt', parsedData.caption);
+      imageEl.setAttribute('alt', parsedData.caption)
     } else {
-      imageEl.removeAttribute('alt');
+      imageEl.removeAttribute('alt')
     }
 
     if (parsedData.dataNom === 'imagenote') {
@@ -252,18 +319,7 @@ async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: 
         parsedData.class.forEach((cls: string) => container.addClass(cls))
       }
       
-      const style: string[] = []
-      if (parsedData.width) style.push(`--width: ${parsedData.width}`)
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`)
-      if (parsedData.col) style.push(`--col: ${parsedData.col}`)
-      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`)
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`)
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`)
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`)
-      
-      if (style.length > 0) {
-        container.setAttribute('style', style.join('; '))
-      }
+      this.applyStyleProperties(container, parsedData)
       
       const videoDiv = container.createEl('div', { cls: 'video' })
       if (parsedData.poster) {
@@ -294,18 +350,7 @@ async processGridImage(imageSyntax: string, container: HTMLElement, sourcePath: 
         parsedData.class.forEach((cls: string) => container.addClass(cls))
       }
       
-      const style: string[] = []
-      if (parsedData.width) style.push(`--width: ${parsedData.width}`)
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`)
-      if (parsedData.col) style.push(`--col: ${parsedData.col}`)
-      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`)
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`)
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`)
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`)
-      
-      if (style.length > 0) {
-        container.setAttribute('style', style.join('; '))
-      }
+      this.applyStyleProperties(container, parsedData)
       
       if (parsedData.poster && imageEl.tagName.toLowerCase() === 'video') {
         imageEl.setAttribute('poster', parsedData.poster)

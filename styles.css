@@ -3,7 +3,7 @@
     --bigsize: clamp(2.50rem, calc(1.83rem + 3.33vw), 6.00rem);
     --basesize: 1.15rem;
     --color: rgba(0, 0, 0, 0.85);
-    --spacer: 2rem;
+    --spacer: 10px;
     --sn-width: 15rem;
     --accentcolor: black;
     --maxwidth: 46rem;
@@ -18,6 +18,12 @@
 .theme-light .figcaption {
     background: #ebebeb;
 }
+
+
+
+
+
+ 
 
 /* ------------------------------------------------------------------------ Images figures (template = figures) */
 .figures_page .content {

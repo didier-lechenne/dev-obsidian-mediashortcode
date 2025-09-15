@@ -57,14 +57,14 @@ var filenameExtensionPlaceholder = "%.%";
 var ImageCaptions = class extends import_obsidian2.Plugin {
   constructor() {
     super(...arguments);
-    // New processor for figure-grid-container code blocks
+    // CORRECTION: Processor pour les blocs de code figure-grid-container
     this.figureGridProcessor = (source, el, ctx) => {
       const container = el.createDiv({ cls: "figure-grid-container" });
       const lines = source.trim().split("\n");
       lines.forEach((line) => {
         const trimmedLine = line.trim();
         if (trimmedLine && trimmedLine.startsWith("![[")) {
-          this.processGridImage(trimmedLine, container, ctx.sourcePath);
+          this.processGridImageSync(trimmedLine, container, ctx.sourcePath);
         }
       });
     };
@@ -117,14 +117,15 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       childList: true
     });
   }
-  async processGridImage(imageSyntax, container, sourcePath) {
+  // CORRECTION: Version synchrone pour éviter les problèmes d'async dans forEach
+  processGridImageSync(imageSyntax, container, sourcePath) {
     const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
     if (!match) return;
-    let imagePath = match[1];
+    const imagePath = match[1];
     const params = match[3] || "";
     const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
     if (!abstractFile) {
-      console.error("Fichier introuvable :", imagePath);
+      console.warn(`Fichier introuvable : ${imagePath}`);
       return;
     }
     const resolvedPath = this.app.vault.getResourcePath(abstractFile);
@@ -132,7 +133,58 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     img.src = resolvedPath;
     img.setAttribute("alt", params);
     const parsedData = this.parseImageData(img);
-    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
+    this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
+  }
+  // NOUVELLE MÉTHODE: Version synchrone de insertFigureWithCaption pour les grilles
+  insertFigureWithCaptionSync(imageEl, outerEl, parsedData, sourcePath) {
+    let container;
+    if (parsedData.caption) {
+      imageEl.setAttribute("alt", parsedData.caption);
+    } else {
+      imageEl.removeAttribute("alt");
+    }
+    if (parsedData.dataNom === "imagenote") {
+      container = outerEl.createEl("span");
+      container.addClass("imagenote");
+      container.setAttribute("id", parsedData.id);
+      container.setAttribute("data-src", imageEl.getAttribute("src") || "");
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls) => container.addClass(cls));
+      }
+      container.appendChild(imageEl);
+      if (parsedData.caption) {
+        const captionSpan = container.createEl("span", { cls: "caption" });
+        captionSpan.textContent = parsedData.caption;
+      }
+    } else {
+      container = outerEl.createEl("figure");
+      container.addClass("figure");
+      container.setAttribute("data-nom", parsedData.dataNom);
+      container.setAttribute("id", parsedData.id);
+      if (parsedData.class && parsedData.class.length > 0) {
+        parsedData.class.forEach((cls) => container.addClass(cls));
+      }
+      this.applyStyleProperties(container, parsedData);
+      container.appendChild(imageEl);
+      if (parsedData.caption) {
+        const figcaption = container.createEl("figcaption", { cls: "figcaption" });
+        figcaption.textContent = parsedData.caption;
+      }
+    }
+  }
+  // NOUVELLE MÉTHODE: Factorisation des propriétés de style
+  applyStyleProperties(container, parsedData) {
+    const style = [];
+    if (parsedData.width) style.push(`--width: ${parsedData.width}`);
+    if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
+    if (parsedData.col) style.push(`--col: ${parsedData.col}`);
+    if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
+    if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
+    if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
+    if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
+    if (style.length > 0) {
+      container.setAttribute("style", style.join("; "));
+    }
   }
   parseImageData(img) {
     let altText = img.getAttribute("alt") || "";
@@ -209,6 +261,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         const match = result.caption.match(new RegExp(this.settings.captionRegex));
         result.caption = (match == null ? void 0 : match[1]) || "";
       } catch (e) {
+        console.warn("Invalid regex in settings:", this.settings.captionRegex);
       }
     }
     if (result.caption === filenamePlaceholder) {
@@ -272,17 +325,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       if (parsedData.class && parsedData.class.length > 0) {
         parsedData.class.forEach((cls) => container.addClass(cls));
       }
-      const style = [];
-      if (parsedData.width) style.push(`--width: ${parsedData.width}`);
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
-      if (parsedData.col) style.push(`--col: ${parsedData.col}`);
-      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
-      if (style.length > 0) {
-        container.setAttribute("style", style.join("; "));
-      }
+      this.applyStyleProperties(container, parsedData);
       const videoDiv = container.createEl("div", { cls: "video" });
       if (parsedData.poster) {
         videoDiv.setAttribute("style", `background-image: url(${parsedData.poster})`);
@@ -308,17 +351,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       if (parsedData.class && parsedData.class.length > 0) {
         parsedData.class.forEach((cls) => container.addClass(cls));
       }
-      const style = [];
-      if (parsedData.width) style.push(`--width: ${parsedData.width}`);
-      if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
-      if (parsedData.col) style.push(`--col: ${parsedData.col}`);
-      if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
-      if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
-      if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
-      if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
-      if (style.length > 0) {
-        container.setAttribute("style", style.join("; "));
-      }
+      this.applyStyleProperties(container, parsedData);
       if (parsedData.poster && imageEl.tagName.toLowerCase() === "video") {
         imageEl.setAttribute("poster", parsedData.poster);
       }
