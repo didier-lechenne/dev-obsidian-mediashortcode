@@ -58,7 +58,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   constructor() {
     super(...arguments);
     this.figureGridProcessor = (source, el, ctx) => {
-      const container = el.createDiv({ cls: "figure-grid-container" });
+      const container = el.createDiv({ cls: "columnGrid" });
       const wikilinks = this.extractWikilinks(source);
       const promises = wikilinks.map((wikilink) => {
         return this.processGridImageSync(wikilink, container, ctx.sourcePath);
@@ -67,18 +67,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     };
   }
   async onload() {
-    document.documentElement.style.setProperty(
-      "--window-width",
-      window.outerWidth + "px"
-    );
-    window.addEventListener("resize", () => {
-      document.documentElement.style.setProperty(
-        "--window-width",
-        window.outerWidth + "px"
-      );
-    });
     this.registerMarkdownCodeBlockProcessor(
-      "figure-grid-container",
+      "columnGrid",
       this.figureGridProcessor.bind(this)
     );
     this.registerMarkdownPostProcessor(this.externalImageProcessor());
@@ -238,7 +228,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     document.addEventListener("click", (event) => {
       var _a;
       const target = event.target;
-      const gridContainer = target.closest(".figure-grid-container");
+      const gridContainer = target.closest(".columnGrid");
       if (gridContainer) {
         let editButton = (_a = gridContainer.parentElement) == null ? void 0 : _a.querySelector(".edit-block-button");
         if (!editButton) {
@@ -312,6 +302,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
               break;
             case "print-width":
             case "printwidth":
+            case "printWidth":
               result.printwidth = value;
               break;
             case "col":
@@ -319,6 +310,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
               break;
             case "print-col":
             case "printcol":
+            case "printCol":
               result.printcol = value;
               break;
             case "class":
@@ -328,12 +320,18 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
               result.poster = value;
               break;
             case "imgx":
+            case "imgX":
+            case "img-x":
               result.imgX = value;
               break;
             case "imgy":
+            case "imgY":
+            case "img-y":
               result.imgY = value;
               break;
             case "imgw":
+            case "imgW":
+            case "img-w":
               result.imgW = value;
               break;
           }
