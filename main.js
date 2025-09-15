@@ -404,16 +404,20 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const filename = (_a = src.split("/").pop()) == null ? void 0 : _a.split("?")[0];
       if (!filename) return this.parseImageData(img);
       const wikilinks = this.extractWikilinks(content);
+      console.log("Extracted wikilinks:", wikilinks);
       const matchingWikilink = wikilinks.find((link) => {
         var _a2;
-        const linkPath = (_a2 = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/)) == null ? void 0 : _a2[1];
+        const linkPath = (_a2 = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/)) == null ? void 0 : _a2[1];
         return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
       });
+      console.log("Matching wikilink:", matchingWikilink);
       if (matchingWikilink) {
         const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
+          console.log("Match[2]:", match[2]);
           const tempImg = document.createElement("img");
           const cleanAlt = match[2] ? match[2].replace(/\s+/g, " ").trim() : "";
+          console.log("Clean alt:", cleanAlt);
           tempImg.setAttribute("alt", cleanAlt);
           tempImg.setAttribute("src", src);
           return this.parseImageData(tempImg);
