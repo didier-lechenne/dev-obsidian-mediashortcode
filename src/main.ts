@@ -352,14 +352,17 @@ private addEditOnClickToGrids() {
             case "width":
               result.width = value;
               break;
-            case "printwidth":
-              result.printwidth = value;
-              break;
             case "col":
               result.col = value;
               break;
+            case "print-col":
             case "printcol":
               result.printcol = value;
+              break;
+            case "print-width":
+            case "printwidth":
+              result.printwidth = value;
+              break;
               break;
             case "class":
               result.class = value.split(",").map((c) => c.trim());
