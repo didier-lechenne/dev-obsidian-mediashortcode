@@ -349,3 +349,17 @@ export default class ImageCaptions extends Plugin {
     this.observer.disconnect();
   }
 }
+
+export async function renderMarkdown(
+  markdown: string,
+  sourcePath: string,
+  component: Component
+): Promise<NodeList | undefined> {
+  const el = createDiv();
+  await MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, component);
+  for (const child of el.children) {
+    if (child.tagName.toLowerCase() === "p") {
+      return child.childNodes;
+    }
+  }
+}

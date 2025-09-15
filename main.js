@@ -24,7 +24,8 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => ImageCaptions
+  default: () => ImageCaptions,
+  renderMarkdown: () => renderMarkdown
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian2 = require("obsidian");
@@ -321,3 +322,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     this.observer.disconnect();
   }
 };
+async function renderMarkdown(markdown, sourcePath, component) {
+  const el = createDiv();
+  await import_obsidian2.MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, component);
+  for (const child of el.children) {
+    if (child.tagName.toLowerCase() === "p") {
+      return child.childNodes;
+    }
+  }
+}
