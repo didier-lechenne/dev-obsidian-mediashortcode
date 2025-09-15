@@ -24,8 +24,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => ImageCaptions,
-  renderMarkdown: () => renderMarkdown
+  default: () => ImageCaptions
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian2 = require("obsidian");
@@ -91,11 +90,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
             const figCaption = imageEmbedContainer.querySelector("figcaption");
             if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
               if (figCaption && parsedData.caption) {
-                const children = (_b = await renderMarkdown(
-                  parsedData.caption,
-                  "",
-                  this
-                )) != null ? _b : [parsedData.caption];
+                const children = (_b = await this.renderMarkdown(parsedData.caption, "")) != null ? _b : [parsedData.caption];
                 figCaption.replaceChildren(...children);
               } else if (!parsedData.caption) {
                 imageEmbedContainer.appendChild(img);
@@ -103,12 +98,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
               }
             } else {
               if (parsedData.caption && parsedData.caption !== imageEmbedContainer.getAttribute("src")) {
-                await this.insertFigureWithCaption(
-                  img,
-                  imageEmbedContainer,
-                  parsedData,
-                  ""
-                );
+                await this.insertFigureWithCaption(img, imageEmbedContainer, parsedData, "");
               }
             }
             if (width) {
@@ -120,7 +110,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         }
         if (rec.type === "attributes" && rec.target instanceof HTMLElement) {
           const img = rec.target;
-          if ((img.tagName === "IMG" || img.tagName === "VIDEO") && rec.attributeName === "alt") {
+          if ((img.tagName === "IMG" || img.tagName === "VIDEO") && (rec.attributeName === "alt" || rec.attributeName === "src")) {
             setTimeout(async () => {
               var _a;
               const parent = img.parentElement;
@@ -128,12 +118,11 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
                 const figCaption = parent.querySelector("figcaption");
                 const parsedData = this.parseImageData(img);
                 if (figCaption && parsedData.caption) {
-                  const children = (_a = await renderMarkdown(
-                    parsedData.caption,
-                    "",
-                    this
-                  )) != null ? _a : [parsedData.caption];
+                  const children = (_a = await this.renderMarkdown(parsedData.caption, "")) != null ? _a : [parsedData.caption];
                   figCaption.replaceChildren(...children);
+                }
+                if (parsedData.class && parsedData.class.length > 0) {
+                  this.updateImageClasses(img, parsedData.class);
                 }
               }
             }, 10);
@@ -145,8 +134,17 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["alt"]
+      attributeFilter: ["alt", "src"]
     });
+  }
+  // Fonction pour mettre à jour les classes dynamiquement
+  updateImageClasses(img, newClassList) {
+    const parentFigure = img.closest("figure, span.imagenote");
+    if (parentFigure) {
+      const baseClass = parentFigure.classList.contains("figure") ? "figure" : "imagenote";
+      parentFigure.classList.value = baseClass;
+      parentFigure.classList.add(...newClassList);
+    }
   }
   extractWikilinks(source) {
     const wikilinks = [];
@@ -183,10 +181,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     if (!match) return;
     const imagePath = match[1].trim();
     const params = match[2] || "";
-    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(
-      imagePath,
-      sourcePath
-    );
+    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
     if (!abstractFile) {
       console.warn(`Fichier introuvable : ${imagePath}`);
       return;
@@ -217,11 +212,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       container.appendChild(imageEl);
       if (parsedData.caption) {
         const captionSpan = container.createEl("span", { cls: "caption" });
-        const children = (_a = await renderMarkdown(
-          parsedData.caption,
-          sourcePath,
-          this
-        )) != null ? _a : [parsedData.caption];
+        const children = (_a = await this.renderMarkdown(parsedData.caption, sourcePath)) != null ? _a : [parsedData.caption];
         captionSpan.replaceChildren(...children);
       }
     } else {
@@ -235,14 +226,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       this.applyStyleProperties(container, parsedData);
       container.appendChild(imageEl);
       if (parsedData.caption) {
-        const figcaption = container.createEl("figcaption", {
-          cls: "figcaption"
-        });
-        const children = (_b = await renderMarkdown(
-          parsedData.caption,
-          sourcePath,
-          this
-        )) != null ? _b : [parsedData.caption];
+        const figcaption = container.createEl("figcaption", { cls: "figcaption" });
+        const children = (_b = await this.renderMarkdown(parsedData.caption, sourcePath)) != null ? _b : [parsedData.caption];
         figcaption.replaceChildren(...children);
       }
     }
@@ -369,9 +354,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     if (this.settings.captionRegex && result.caption) {
       try {
-        const match = result.caption.match(
-          new RegExp(this.settings.captionRegex)
-        );
+        const match = result.caption.match(new RegExp(this.settings.captionRegex));
         result.caption = (match == null ? void 0 : match[1]) || "";
       } catch (e) {
         console.warn("Invalid regex in settings:", this.settings.captionRegex);
@@ -386,10 +369,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     } else if (result.caption === "\\" + filenamePlaceholder) {
       result.caption = filenamePlaceholder;
     }
-    result.caption = result.caption.replace(
-      /<<(.*?)>>/g,
-      (_, linktext) => "[[" + linktext + "]]"
-    );
+    result.caption = result.caption.replace(/<<(.*?)>>/g, (_, linktext) => "[[" + linktext + "]]");
     return result;
   }
   generateSlug(src) {
@@ -413,12 +393,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         const parsedData = await this.parseImageDataFromContext(img, ctx);
         const parent = img.parentElement;
         if (parent && (parent == null ? void 0 : parent.nodeName) !== "FIGURE" && parsedData.caption && parsedData.caption !== img.getAttribute("src")) {
-          await this.insertFigureWithCaption(
-            img,
-            parent,
-            parsedData,
-            ctx.sourcePath
-          );
+          await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath);
         }
       });
     };
@@ -433,20 +408,16 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const filename = (_a = src.split("/").pop()) == null ? void 0 : _a.split("?")[0];
       if (!filename) return this.parseImageData(img);
       const wikilinks = this.extractWikilinks(content);
-      console.log("Extracted wikilinks:", wikilinks);
       const matchingWikilink = wikilinks.find((link) => {
         var _a2;
         const linkPath = (_a2 = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/)) == null ? void 0 : _a2[1];
         return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
       });
-      console.log("Matching wikilink:", matchingWikilink);
       if (matchingWikilink) {
         const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
-          console.log("Match[2]:", match[2]);
           const tempImg = document.createElement("img");
           const cleanAlt = match[2] ? match[2].replace(/\s+/g, " ").trim() : "";
-          console.log("Clean alt:", cleanAlt);
           tempImg.setAttribute("alt", cleanAlt);
           tempImg.setAttribute("src", src);
           return this.parseImageData(tempImg);
@@ -476,11 +447,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       container.appendChild(imageEl);
       if (parsedData.caption) {
         const captionSpan = container.createEl("span", { cls: "caption" });
-        const children = (_a = await renderMarkdown(
-          parsedData.caption,
-          sourcePath,
-          this
-        )) != null ? _a : [parsedData.caption];
+        const children = (_a = await this.renderMarkdown(parsedData.caption, sourcePath)) != null ? _a : [parsedData.caption];
         captionSpan.replaceChildren(...children);
       }
     } else if (parsedData.dataNom === "video") {
@@ -493,10 +460,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       this.applyStyleProperties(container, parsedData);
       const videoDiv = container.createEl("div", { cls: "video" });
       if (parsedData.poster) {
-        videoDiv.setAttribute(
-          "style",
-          `background-image: url(${parsedData.poster})`
-        );
+        videoDiv.setAttribute("style", `background-image: url(${parsedData.poster})`);
       }
       const src = imageEl.getAttribute("src") || "";
       const videoContent = this.createVideoContent(src);
@@ -506,14 +470,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         videoDiv.appendChild(imageEl);
       }
       if (parsedData.caption) {
-        const children = (_b = await renderMarkdown(
-          parsedData.caption,
-          sourcePath,
-          this
-        )) != null ? _b : [parsedData.caption];
-        container.createEl("figcaption", {
-          cls: "figcaption"
-        }).replaceChildren(...children);
+        const children = (_b = await this.renderMarkdown(parsedData.caption, sourcePath)) != null ? _b : [parsedData.caption];
+        container.createEl("figcaption", { cls: "figcaption" }).replaceChildren(...children);
       }
     } else {
       container = outerEl.createEl("figure");
@@ -529,14 +487,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       }
       container.appendChild(imageEl);
       if (parsedData.caption) {
-        const children = (_c = await renderMarkdown(
-          parsedData.caption,
-          sourcePath,
-          this
-        )) != null ? _c : [parsedData.caption];
-        container.createEl("figcaption", {
-          cls: "figcaption"
-        }).replaceChildren(...children);
+        const children = (_c = await this.renderMarkdown(parsedData.caption, sourcePath)) != null ? _c : [parsedData.caption];
+        container.createEl("figcaption", { cls: "figcaption" }).replaceChildren(...children);
       }
     }
   }
@@ -550,22 +502,28 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     return null;
   }
   createYouTubeEmbed(url) {
-    const match = url.match(
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/
-    );
+    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/);
     if (!match) return null;
     const videoId = match[1];
     const src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
     return `<youtube-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></youtube-embed>`;
   }
   createVimeoEmbed(url) {
-    const match = url.match(
-      /(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/
-    );
+    const match = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/);
     if (!match) return null;
     const videoId = match[1];
     const src = `https://player.vimeo.com/video/${videoId}?autoplay=1&rel=0`;
     return `<vimeo-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></vimeo-embed>`;
+  }
+  async renderMarkdown(markdown, sourcePath) {
+    const el = createDiv();
+    await import_obsidian2.MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, this);
+    for (const child of el.children) {
+      if (child.tagName.toLowerCase() === "p") {
+        return child.childNodes;
+      }
+    }
+    return;
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
@@ -577,12 +535,3 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     this.observer.disconnect();
   }
 };
-async function renderMarkdown(markdown, sourcePath, component) {
-  const el = createDiv();
-  await import_obsidian2.MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, component);
-  for (const child of el.children) {
-    if (child.tagName.toLowerCase() === "p") {
-      return child.childNodes;
-    }
-  }
-}
