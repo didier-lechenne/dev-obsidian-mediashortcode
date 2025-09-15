@@ -57,9 +57,8 @@ var filenameExtensionPlaceholder = "%.%";
 var ImageCaptions = class extends import_obsidian2.Plugin {
   constructor() {
     super(...arguments);
-    // Processor pour les blocs de code figure-grid-container avec support multiligne
     this.figureGridProcessor = (source, el, ctx) => {
-      const container = el.createDiv({ cls: "figure-grid-container" });
+      const container = el.createDiv({ cls: "columnGrid" });
       const wikilinks = this.extractWikilinks(source);
       const promises = wikilinks.map((wikilink) => {
         return this.processGridImageSync(wikilink, container, ctx.sourcePath);
@@ -68,18 +67,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     };
   }
   async onload() {
-    document.documentElement.style.setProperty(
-      "--window-width",
-      window.outerWidth + "px"
-    );
-    window.addEventListener("resize", () => {
-      document.documentElement.style.setProperty(
-        "--window-width",
-        window.outerWidth + "px"
-      );
-    });
     this.registerMarkdownCodeBlockProcessor(
-      "figure-grid-container",
+      "columnGrid",
       this.figureGridProcessor.bind(this)
     );
     this.registerMarkdownPostProcessor(this.externalImageProcessor());
@@ -136,7 +125,6 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       childList: true
     });
   }
-  // Extraction des wikilinks multiligne
   extractWikilinks(source) {
     const wikilinks = [];
     let current = "";
@@ -166,7 +154,6 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     return wikilinks;
   }
-  // Version asynchrone pour le parsing markdown
   async processGridImageSync(imageSyntax, container, sourcePath) {
     const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
     const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
@@ -188,7 +175,6 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     const parsedData = this.parseImageData(img);
     await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
   }
-  // Version asynchrone de insertFigureWithCaption pour les grilles avec markdown
   async insertFigureWithCaptionSync(imageEl, outerEl, parsedData, sourcePath) {
     var _a, _b;
     let container;
@@ -238,12 +224,11 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       }
     }
   }
-  // Clic pour éditer les grilles
   addEditOnClickToGrids() {
     document.addEventListener("click", (event) => {
       var _a;
       const target = event.target;
-      const gridContainer = target.closest(".figure-grid-container");
+      const gridContainer = target.closest(".columnGrid");
       if (gridContainer) {
         let editButton = (_a = gridContainer.parentElement) == null ? void 0 : _a.querySelector(".edit-block-button");
         if (!editButton) {
@@ -261,12 +246,10 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       }
     });
   }
-  // Factorisation des propriétés de style
   applyStyleProperties(container, parsedData) {
     const style = [];
     if (parsedData.width) style.push(`--width: ${parsedData.width}`);
-    if (parsedData.printwidth)
-      style.push(`--print-width: ${parsedData.printwidth}`);
+    if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
     if (parsedData.col) style.push(`--col: ${parsedData.col}`);
     if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
     if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
@@ -279,7 +262,6 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   parseImageData(img) {
     let altText = img.getAttribute("alt") || "";
     const src = img.getAttribute("src") || "";
-    const parts = altText.split("|").map((part) => part.trim());
     const result = {
       dataNom: "image",
       caption: "",
@@ -299,10 +281,9 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       result.caption = "";
       return result;
     }
-    if (parts.length > 1 && ["imagenote", "image", "imageGrid", "figure", "video"].includes(parts[0])) {
-      result.dataNom = parts[0];
-      for (let i = 1; i < parts.length; i++) {
-        const part = parts[i];
+    if (altText.includes(":")) {
+      const parts = altText.split("|").map((part) => part.trim());
+      for (const part of parts) {
         if (part.includes(":")) {
           const [key, ...valueParts] = part.split(":");
           const value = valueParts.join(":").trim();
@@ -310,20 +291,27 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
             case "caption":
               result.caption = value;
               break;
+            case "type":
+            case "dataNom":
+              if (["imagenote", "image", "imageGrid", "figure", "video"].includes(value)) {
+                result.dataNom = value;
+              }
+              break;
             case "width":
               result.width = value;
+              break;
+            case "print-width":
+            case "printwidth":
+            case "printWidth":
+              result.printwidth = value;
               break;
             case "col":
               result.col = value;
               break;
             case "print-col":
             case "printcol":
+            case "printCol":
               result.printcol = value;
-              break;
-            case "print-width":
-            case "printwidth":
-              result.printwidth = value;
-              break;
               break;
             case "class":
               result.class = value.split(",").map((c) => c.trim());
@@ -332,22 +320,32 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
               result.poster = value;
               break;
             case "imgx":
+            case "imgX":
+            case "img-x":
               result.imgX = value;
               break;
             case "imgy":
+            case "imgY":
+            case "img-y":
               result.imgY = value;
               break;
             case "imgw":
+            case "imgW":
+            case "img-w":
               result.imgW = value;
               break;
             case "id":
               result.id = value;
               break;
           }
+        } else {
+          if (!result.caption && part) {
+            result.caption = part;
+          }
         }
       }
     } else {
-      result.caption = parts[0];
+      result.caption = altText;
     }
     if (this.settings.captionRegex && result.caption) {
       try {

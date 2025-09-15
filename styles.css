@@ -7,33 +7,43 @@
     --sn-width: 15rem;
     --accentcolor: black;
     --maxwidth: 46rem;
+    
 }
 
 .theme-dark .figure,
 .theme-dark .figcaption {
-    background: #303030;
+    background: unset;
 }
 
 .theme-light .figure,
 .theme-light .figcaption {
-    background: #ebebeb;
+    background: unset;
+}
+
+
+
+.markdown-source-view , .markdown-preview-view  {
+  counter-reset: global-figure ;
+}
+
+.markdown-source-view figure, .markdown-preview-view figure  {
+  counter-increment: global-figure;
 }
 
 
 
 
-.block-language-figure-grid-container,
-.cm-lang-figure-grid-container {
-    width: calc(((100vw - var(--file-line-width)) / 2) + var(--file-line-width));
+.block-language-columnGrid,
+.cm-lang-columnGrid {
+    width: calc(((100vw - var(--file-line-width)) / 2) + var(--file-line-width) -  var(--ribbon-width));
     position: relative;
-    left: 0;
-    right: 0;
     overflow-x: hidden;
     padding-right:var(--file-margins);
 }
 
+
 /* ------------------------------------------------------------------------ Grid container for multiple images */
-.figure-grid-container {
+.columnGrid {
   display: grid !important;
   grid-template-columns: repeat(12, 1fr);
   grid-gap: var(--spacer);
@@ -42,8 +52,8 @@
 }
 
 /* Default 3-column layout for figures in grid */
-.figure-grid-container .figure,
-.figure-grid-container .videofigure {
+.columnGrid .figure,
+.columnGrid .videofigure {
   grid-column: span 3; /* 3 columns by default */
   align-self: start;
   margin: 0;
@@ -54,8 +64,8 @@
 
 
 /* Allow custom column spans via --col CSS variable */
-.figure-grid-container .figure,
-.figure-grid-container .videofigure {
+.columnGrid .figure,
+.columnGrid .videofigure {
   grid-column: var(--col, auto) / span var(--width, 3);
 }
 
@@ -65,6 +75,8 @@
 .appendices .content > :not(figure){
   grid-column: span 8;
 }
+
+
 
 /* figures and videofigures default : 3 cols  */
 .videofigure,
@@ -93,13 +105,17 @@
 }
 
 figcaption {
-  font-size: 0.85rem;
-  background: white;
+  font-size: var(--font-smallest);
   padding: 0.5em 0 0;
 }
-figcaption::before {
-  content: "→ ";
+
+
+html figure .figcaption::before {
+  content: "↑ [fig. " counter(global-figure) " ] ";
 }
+
+
+
 figcaption:empty { display: none;}
 
 /* largeur et décalage des .figure et .videofigure, uniquement pour la version écran */

@@ -18,26 +18,14 @@ export default class ImageCaptions extends Plugin {
   observer: MutationObserver;
 
   async onload() {
-    document.documentElement.style.setProperty(
-      "--window-width",
-      window.outerWidth + "px"
-    );
-    window.addEventListener("resize", () => {
-      document.documentElement.style.setProperty(
-        "--window-width",
-        window.outerWidth + "px"
-      );
-    });
 
-    // Register code block processor for figure-grid-container
+
     this.registerMarkdownCodeBlockProcessor(
-      "figure-grid-container",
+      "columnGrid",
       this.figureGridProcessor.bind(this)
     );
 
     this.registerMarkdownPostProcessor(this.externalImageProcessor());
-
-    // Ajouter le clic pour éditer les grilles
     this.addEditOnClickToGrids();
 
     await this.loadSettings();
@@ -101,11 +89,8 @@ export default class ImageCaptions extends Plugin {
     });
   }
 
-  // Processor pour les blocs de code figure-grid-container avec support multiligne
   figureGridProcessor = (source: string, el: HTMLElement, ctx: any) => {
-    const container = el.createDiv({ cls: "figure-grid-container" });
-    
-    // Extraire les wikilinks (même multiligne)
+    const container = el.createDiv({ cls: "columnGrid" });
     const wikilinks = this.extractWikilinks(source);
     
     const promises = wikilinks.map((wikilink) => {
@@ -115,7 +100,6 @@ export default class ImageCaptions extends Plugin {
     Promise.all(promises);
   };
 
-  // Extraction des wikilinks multiligne
   private extractWikilinks(source: string): string[] {
     const wikilinks: string[] = [];
     let current = '';
@@ -127,11 +111,10 @@ export default class ImageCaptions extends Plugin {
       const nextChar = source[i + 1];
       
       if (char === '!' && nextChar === '[' && source[i + 2] === '[') {
-        // Début d'un wikilink
         inWikilink = true;
         current = '![[';
         bracketCount = 2;
-        i += 2; // Skip les deux crochets
+        i += 2;
       } else if (inWikilink) {
         current += char;
         
@@ -141,7 +124,6 @@ export default class ImageCaptions extends Plugin {
           bracketCount--;
           
           if (bracketCount === 0) {
-            // Fin du wikilink
             wikilinks.push(current);
             current = '';
             inWikilink = false;
@@ -153,46 +135,36 @@ export default class ImageCaptions extends Plugin {
     return wikilinks;
   }
 
-  // Version asynchrone pour le parsing markdown
-async processGridImageSync(
-  imageSyntax: string,
-  container: HTMLElement,
-  sourcePath: string
-) {
-  // Nettoyer les retours à la ligne et espaces multiples
-  const cleanSyntax = imageSyntax.replace(/\s+/g, ' ').trim();
-  
-  // Nouvelle regex pour capturer le chemin même s'il y a des espaces/retours
-  const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
-  if (!match) return;
+  async processGridImageSync(
+    imageSyntax: string,
+    container: HTMLElement,
+    sourcePath: string
+  ) {
+    const cleanSyntax = imageSyntax.replace(/\s+/g, ' ').trim();
+    const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
+    if (!match) return;
 
-  const imagePath = match[1].trim();
-  const params = match[2] || "";
+    const imagePath = match[1].trim();
+    const params = match[2] || "";
 
-  // Résolution du chemin wikilink
-  const abstractFile = this.app.metadataCache.getFirstLinkpathDest(
-    imagePath,
-    sourcePath
-  );
-  if (!abstractFile) {
-    console.warn(`Fichier introuvable : ${imagePath}`);
-    return;
+    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(
+      imagePath,
+      sourcePath
+    );
+    if (!abstractFile) {
+      console.warn(`Fichier introuvable : ${imagePath}`);
+      return;
+    }
+
+    const resolvedPath = this.app.vault.getResourcePath(abstractFile);
+    const img = container.createEl("img");
+    img.src = resolvedPath;
+    img.setAttribute("alt", params);
+
+    const parsedData = this.parseImageData(img);
+    await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
   }
 
-  const resolvedPath = this.app.vault.getResourcePath(abstractFile);
-  const img = container.createEl("img");
-  img.src = resolvedPath;
-  img.setAttribute("alt", params);
-
-  const parsedData = this.parseImageData(img);
-
-  // Traitement asynchrone pour le markdown
-  await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
-}
-
-
-
-  // Version asynchrone de insertFigureWithCaption pour les grilles avec markdown
   async insertFigureWithCaptionSync(
     imageEl: HTMLElement,
     outerEl: HTMLElement | Element,
@@ -221,7 +193,6 @@ async processGridImageSync(
 
       if (parsedData.caption) {
         const captionSpan = container.createEl("span", { cls: "caption" });
-        // Parsing markdown
         const children = (await renderMarkdown(
           parsedData.caption,
           sourcePath,
@@ -247,7 +218,6 @@ async processGridImageSync(
         const figcaption = container.createEl("figcaption", {
           cls: "figcaption",
         });
-        // Parsing markdown
         const children = (await renderMarkdown(
           parsedData.caption,
           sourcePath,
@@ -258,39 +228,35 @@ async processGridImageSync(
     }
   }
 
-  // Clic pour éditer les grilles
-private addEditOnClickToGrids() {
-  document.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-    const gridContainer = target.closest('.figure-grid-container');
-    
-    if (gridContainer) {
-      // Chercher le bouton d'édition dans différents parents possibles
-      let editButton = gridContainer.parentElement?.querySelector('.edit-block-button') as HTMLElement;
+  private addEditOnClickToGrids() {
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      const gridContainer = target.closest('.columnGrid');
       
-      if (!editButton) {
-        // Chercher plus haut dans la hiérarchie
-        let parent = gridContainer.parentElement;
-        while (parent && !editButton) {
-          editButton = parent.querySelector('.edit-block-button') as HTMLElement;
-          parent = parent.parentElement;
+      if (gridContainer) {
+        let editButton = gridContainer.parentElement?.querySelector('.edit-block-button') as HTMLElement;
+        
+        if (!editButton) {
+          let parent = gridContainer.parentElement;
+          while (parent && !editButton) {
+            editButton = parent.querySelector('.edit-block-button') as HTMLElement;
+            parent = parent.parentElement;
+          }
+        }
+        
+        if (editButton) {
+          editButton.click();
+          event.preventDefault();
+          event.stopPropagation();
         }
       }
-      
-      if (editButton) {
-        editButton.click();
-        event.preventDefault();
-        event.stopPropagation();
-      }
-    }
-  });
-}
-  // Factorisation des propriétés de style
+    });
+  }
+
   private applyStyleProperties(container: HTMLElement, parsedData: any) {
     const style: string[] = [];
     if (parsedData.width) style.push(`--width: ${parsedData.width}`);
-    if (parsedData.printwidth)
-      style.push(`--print-width: ${parsedData.printwidth}`);
+    if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
     if (parsedData.col) style.push(`--col: ${parsedData.col}`);
     if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
     if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
@@ -306,8 +272,7 @@ private addEditOnClickToGrids() {
     let altText = img.getAttribute("alt") || "";
     const src = img.getAttribute("src") || "";
 
-    const parts = altText.split("|").map((part) => part.trim());
-
+    // Syntaxe unifiée : détection automatique
     const result = {
       dataNom: "image",
       caption: "",
@@ -323,24 +288,17 @@ private addEditOnClickToGrids() {
       id: this.generateSlug(src),
     };
 
-    // Check if it's the default Obsidian behavior
     const edge = altText.replace(/ > /, "#");
     if (altText === src || edge === src) {
       result.caption = "";
       return result;
     }
 
-    // New syntax: first part is data-nom
-    if (
-      parts.length > 1 &&
-      ["imagenote", "image", "imageGrid", "figure", "video"].includes(parts[0])
-    ) {
-      result.dataNom = parts[0];
-
-      // Parse remaining parts as key:value
-      for (let i = 1; i < parts.length; i++) {
-        const part = parts[i];
-
+    // Si contient des ":", nouvelle syntaxe structurée
+    if (altText.includes(":")) {
+      const parts = altText.split("|").map((part) => part.trim());
+      
+      for (const part of parts) {
         if (part.includes(":")) {
           const [key, ...valueParts] = part.split(":");
           const value = valueParts.join(":").trim();
@@ -349,20 +307,27 @@ private addEditOnClickToGrids() {
             case "caption":
               result.caption = value;
               break;
+            case "type":
+            case "dataNom":
+              if (["imagenote", "image", "imageGrid", "figure", "video"].includes(value)) {
+                result.dataNom = value;
+              }
+              break;
             case "width":
               result.width = value;
+              break;
+            case "print-width":
+            case "printwidth":
+            case "printWidth":
+              result.printwidth = value;
               break;
             case "col":
               result.col = value;
               break;
             case "print-col":
             case "printcol":
+            case "printCol":
               result.printcol = value;
-              break;
-            case "print-width":
-            case "printwidth":
-              result.printwidth = value;
-              break;
               break;
             case "class":
               result.class = value.split(",").map((c) => c.trim());
@@ -371,26 +336,37 @@ private addEditOnClickToGrids() {
               result.poster = value;
               break;
             case "imgx":
+            case "imgX":
+            case "img-x":
               result.imgX = value;
               break;
             case "imgy":
+            case "imgY":
+            case "img-y":
               result.imgY = value;
               break;
             case "imgw":
+            case "imgW":
+            case "img-w":
               result.imgW = value;
               break;
             case "id":
               result.id = value;
               break;
           }
+        } else {
+          // Si pas de ":", considérer comme caption
+          if (!result.caption && part) {
+            result.caption = part;
+          }
         }
       }
     } else {
-      // Old syntax: first part is caption
-      result.caption = parts[0];
+      // Syntaxe simple : tout est caption
+      result.caption = altText;
     }
 
-    // Apply existing logic
+    // Logique existante pour les placeholders
     if (this.settings.captionRegex && result.caption) {
       try {
         const match = result.caption.match(
