@@ -24,8 +24,7 @@ var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: tru
 // src/main.ts
 var main_exports = {};
 __export(main_exports, {
-  default: () => ImageCaptions,
-  renderMarkdown: () => renderMarkdown
+  default: () => ImageCaptions
 });
 module.exports = __toCommonJS(main_exports);
 var import_obsidian2 = require("obsidian");
@@ -59,7 +58,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const container = el.createDiv({ cls: "columnGrid" });
       const wikilinks = this.extractWikilinks(source);
       const promises = wikilinks.map((wikilink) => {
-        return this.processGridImageSync(wikilink, container, ctx.sourcePath);
+        return this.processGridImage(wikilink, container, ctx.sourcePath);
       });
       Promise.all(promises);
     };
@@ -105,12 +104,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
         if (figCaption && parsedAlt.caption) {
           const children = await this.renderMarkdown(parsedAlt.caption, "");
-          if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
-            const pElement = children[0];
-            figCaption.replaceChildren(...Array.from(pElement.childNodes));
-          } else {
-            figCaption.replaceChildren(...children);
-          }
+          this.updateFigcaption(figCaption, children);
         }
       } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
         await this.insertFigureWithCaption(img, embedContainer, parsedAlt, "");
@@ -136,15 +130,10 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         const parent = target.parentElement;
         if (parent && parent.nodeName === "FIGURE") {
           const figCaption = parent.querySelector("figcaption");
-          const parsedData = this.parseImageData(target);
+          const parsedData = this.parseAltAttributes(target.getAttribute("alt") || "");
           if (figCaption && parsedData.caption) {
             const children = await this.renderMarkdown(parsedData.caption, "");
-            if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
-              const pElement = children[0];
-              figCaption.replaceChildren(...Array.from(pElement.childNodes));
-            } else {
-              figCaption.replaceChildren(...children);
-            }
+            this.updateFigcaption(figCaption, children);
           }
         }
       }, 10);
@@ -197,10 +186,6 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     return result;
   }
-  parseImageData(img) {
-    const altText = img.getAttribute("alt") || "";
-    return this.parseAltAttributes(altText);
-  }
   async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
     let container;
     if (parsedData.caption) {
@@ -223,42 +208,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     if (parsedData.caption) {
       const figcaption = container.createEl("figcaption", { cls: "figcaption" });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
-        const pElement = children[0];
-        figcaption.replaceChildren(...Array.from(pElement.childNodes));
-      } else {
-        figcaption.replaceChildren(...children);
-      }
-    }
-  }
-  async insertFigureWithCaptionSync(imageEl, outerEl, parsedData, sourcePath) {
-    let container;
-    if (parsedData.caption) {
-      imageEl.setAttribute("alt", parsedData.caption);
-    } else {
-      imageEl.removeAttribute("alt");
-    }
-    container = outerEl.createEl("figure");
-    container.addClass("figure");
-    if (parsedData.class && parsedData.class.length > 0) {
-      parsedData.class.forEach((cls) => container.addClass(cls));
-    }
-    if (parsedData.width) {
-      container.setAttribute("style", `--width: ${parsedData.width}`);
-    }
-    if (parsedData.col) {
-      container.setAttribute("style", `--col: ${parsedData.col}`);
-    }
-    container.appendChild(imageEl);
-    if (parsedData.caption) {
-      const figcaption = container.createEl("figcaption", { cls: "figcaption" });
-      const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
-        const pElement = children[0];
-        figcaption.replaceChildren(...Array.from(pElement.childNodes));
-      } else {
-        figcaption.replaceChildren(...children);
-      }
+      this.updateFigcaption(figcaption, children);
     }
   }
   extractWikilinks(source) {
@@ -290,7 +240,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     return wikilinks;
   }
-  async processGridImageSync(imageSyntax, container, sourcePath) {
+  async processGridImage(imageSyntax, container, sourcePath) {
     const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
     const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+?))?\]\]/);
     if (!match) return;
@@ -306,7 +256,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     img.src = resolvedPath;
     img.setAttribute("alt", params);
     const parsedData = this.parseAltAttributes(params);
-    await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
+    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
   }
   addEditOnClickToGrids() {
     document.addEventListener("click", (event) => {
@@ -351,6 +301,14 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     return nodes.length > 0 ? nodes : [document.createTextNode(markdown)];
   }
+  updateFigcaption(figcaption, children) {
+    if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+      const pElement = children[0];
+      figcaption.replaceChildren(...Array.from(pElement.childNodes));
+    } else {
+      figcaption.replaceChildren(...children);
+    }
+  }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
@@ -361,12 +319,3 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     this.observer.disconnect();
   }
 };
-async function renderMarkdown(markdown, sourcePath, component) {
-  const el = createDiv();
-  await import_obsidian2.MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, component);
-  for (const child of el.children) {
-    if (child.tagName.toLowerCase() === "p") {
-      return child.childNodes;
-    }
-  }
-}
