@@ -263,6 +263,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   parseImageData(img) {
     let altText = img.getAttribute("alt") || "";
     const src = img.getAttribute("src") || "";
+    console.log("DEBUG altText:", JSON.stringify(altText));
+    console.log("DEBUG contient ':':", altText.includes(":"));
     const result = {
       dataNom: "image",
       caption: "",
