@@ -365,7 +365,7 @@ export default class ImageCaptions extends Plugin {
         );
         result.caption = match?.[1] || "";
       } catch (e) {
-        console.warn("Invalid regex in settings:", this.settings.captionRegex);
+        // console.warn("Invalid regex in settings:", this.settings.captionRegex);
       }
     }
 
@@ -435,22 +435,22 @@ export default class ImageCaptions extends Plugin {
       if (!filename) return this.parseImageData(img);
       
       const wikilinks = this.extractWikilinks(content);
-      console.log('Extracted wikilinks:', wikilinks);
+      // console.log('Extracted wikilinks:', wikilinks);
       
       const matchingWikilink = wikilinks.find(link => {
         const linkPath = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/)?.[1];
         return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
       });
       
-      console.log('Matching wikilink:', matchingWikilink);
+      // console.log('Matching wikilink:', matchingWikilink);
       
       if (matchingWikilink) {
         const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
-          console.log('Match[2]:', match[2]);
+          // console.log('Match[2]:', match[2]);
           const tempImg = document.createElement('img');
           const cleanAlt = match[2] ? match[2].replace(/\s+/g, ' ').trim() : '';
-          console.log('Clean alt:', cleanAlt);
+          // console.log('Clean alt:', cleanAlt);
           tempImg.setAttribute('alt', cleanAlt);
           tempImg.setAttribute('src', src);
           return this.parseImageData(tempImg);
