@@ -275,9 +275,6 @@ export default class ImageCaptions extends Plugin {
     let altText = img.getAttribute("alt") || "";
     const src = img.getAttribute("src") || "";
 
-    console.log("DEBUG altText:", JSON.stringify(altText));
-    console.log("DEBUG contient ':':", altText.includes(":"));
-
     // Syntaxe unifiée : détection automatique
     const result = {
       dataNom: "image",
