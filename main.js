@@ -169,10 +169,10 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   // Version asynchrone pour le parsing markdown
   async processGridImageSync(imageSyntax, container, sourcePath) {
     const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
-    const match = cleanSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
+    const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
     if (!match) return;
-    const imagePath = match[1];
-    const params = match[3] || "";
+    const imagePath = match[1].trim();
+    const params = match[2] || "";
     const abstractFile = this.app.metadataCache.getFirstLinkpathDest(
       imagePath,
       sourcePath
@@ -245,7 +245,14 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const target = event.target;
       const gridContainer = target.closest(".figure-grid-container");
       if (gridContainer) {
-        const editButton = (_a = gridContainer.parentElement) == null ? void 0 : _a.querySelector(".edit-block-button");
+        let editButton = (_a = gridContainer.parentElement) == null ? void 0 : _a.querySelector(".edit-block-button");
+        if (!editButton) {
+          let parent = gridContainer.parentElement;
+          while (parent && !editButton) {
+            editButton = parent.querySelector(".edit-block-button");
+            parent = parent.parentElement;
+          }
+        }
         if (editButton) {
           editButton.click();
           event.preventDefault();

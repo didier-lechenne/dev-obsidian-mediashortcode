@@ -154,40 +154,43 @@ export default class ImageCaptions extends Plugin {
   }
 
   // Version asynchrone pour le parsing markdown
-  async processGridImageSync(
-    imageSyntax: string,
-    container: HTMLElement,
-    sourcePath: string
-  ) {
-    // Nettoyer les retours à la ligne et espaces multiples
-    const cleanSyntax = imageSyntax.replace(/\s+/g, ' ').trim();
-    
-    const match = cleanSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
-    if (!match) return;
+async processGridImageSync(
+  imageSyntax: string,
+  container: HTMLElement,
+  sourcePath: string
+) {
+  // Nettoyer les retours à la ligne et espaces multiples
+  const cleanSyntax = imageSyntax.replace(/\s+/g, ' ').trim();
+  
+  // Nouvelle regex pour capturer le chemin même s'il y a des espaces/retours
+  const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
+  if (!match) return;
 
-    const imagePath = match[1];
-    const params = match[3] || "";
+  const imagePath = match[1].trim();
+  const params = match[2] || "";
 
-    // Résolution du chemin wikilink
-    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(
-      imagePath,
-      sourcePath
-    );
-    if (!abstractFile) {
-      console.warn(`Fichier introuvable : ${imagePath}`);
-      return;
-    }
-
-    const resolvedPath = this.app.vault.getResourcePath(abstractFile);
-    const img = container.createEl("img");
-    img.src = resolvedPath;
-    img.setAttribute("alt", params);
-
-    const parsedData = this.parseImageData(img);
-
-    // Traitement asynchrone pour le markdown
-    await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
+  // Résolution du chemin wikilink
+  const abstractFile = this.app.metadataCache.getFirstLinkpathDest(
+    imagePath,
+    sourcePath
+  );
+  if (!abstractFile) {
+    console.warn(`Fichier introuvable : ${imagePath}`);
+    return;
   }
+
+  const resolvedPath = this.app.vault.getResourcePath(abstractFile);
+  const img = container.createEl("img");
+  img.src = resolvedPath;
+  img.setAttribute("alt", params);
+
+  const parsedData = this.parseImageData(img);
+
+  // Traitement asynchrone pour le markdown
+  await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
+}
+
+
 
   // Version asynchrone de insertFigureWithCaption pour les grilles avec markdown
   async insertFigureWithCaptionSync(
@@ -256,24 +259,32 @@ export default class ImageCaptions extends Plugin {
   }
 
   // Clic pour éditer les grilles
-  private addEditOnClickToGrids() {
-    document.addEventListener('click', (event) => {
-      const target = event.target as HTMLElement;
-      const gridContainer = target.closest('.figure-grid-container');
+private addEditOnClickToGrids() {
+  document.addEventListener('click', (event) => {
+    const target = event.target as HTMLElement;
+    const gridContainer = target.closest('.figure-grid-container');
+    
+    if (gridContainer) {
+      // Chercher le bouton d'édition dans différents parents possibles
+      let editButton = gridContainer.parentElement?.querySelector('.edit-block-button') as HTMLElement;
       
-      if (gridContainer) {
-        // Trouver le bouton d'édition du bloc
-        const editButton = gridContainer.parentElement?.querySelector('.edit-block-button') as HTMLElement;
-        
-        if (editButton) {
-          editButton.click();
-          event.preventDefault();
-          event.stopPropagation();
+      if (!editButton) {
+        // Chercher plus haut dans la hiérarchie
+        let parent = gridContainer.parentElement;
+        while (parent && !editButton) {
+          editButton = parent.querySelector('.edit-block-button') as HTMLElement;
+          parent = parent.parentElement;
         }
       }
-    });
-  }
-
+      
+      if (editButton) {
+        editButton.click();
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+  });
+}
   // Factorisation des propriétés de style
   private applyStyleProperties(container: HTMLElement, parsedData: any) {
     const style: string[] = [];
