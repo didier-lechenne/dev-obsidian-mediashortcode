@@ -3,7 +3,7 @@
     --bigsize: clamp(2.50rem, calc(1.83rem + 3.33vw), 6.00rem);
     --basesize: 1.15rem;
     --color: rgba(0, 0, 0, 0.85);
-    --spacer: 10px;
+    --spacer: 1rem;
     --sn-width: 15rem;
     --accentcolor: black;
     --maxwidth: 46rem;
@@ -22,15 +22,14 @@
 
 
 
-
- 
-
-/* ------------------------------------------------------------------------ Images figures (template = figures) */
-.figures_page .content {
-  display: grid;
-  grid-template-columns: repeat(12, 1fr);
-  grid-gap: var(--spacer);
-  align-content: start;
+.block-language-figure-grid-container,
+.cm-lang-figure-grid-container {
+    width: calc(((100vw - var(--file-line-width)) / 2) + var(--file-line-width));
+    position: relative;
+    left: 0;
+    right: 0;
+    overflow-x: hidden;
+    padding-right:var(--file-margins);
 }
 
 /* ------------------------------------------------------------------------ Grid container for multiple images */

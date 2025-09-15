@@ -37,6 +37,9 @@ export default class ImageCaptions extends Plugin {
 
     this.registerMarkdownPostProcessor(this.externalImageProcessor());
 
+    // Ajouter le clic pour éditer les grilles
+    this.addEditOnClickToGrids();
+
     await this.loadSettings();
     this.addSettingTab(new CaptionSettingTab(this.app, this));
 
@@ -98,29 +101,68 @@ export default class ImageCaptions extends Plugin {
     });
   }
 
-  // CORRECTION: Processor pour les blocs de code figure-grid-container
+  // Processor pour les blocs de code figure-grid-container avec support multiligne
   figureGridProcessor = (source: string, el: HTMLElement, ctx: any) => {
     const container = el.createDiv({ cls: "figure-grid-container" });
-
-    const lines = source.trim().split("\n");
-
-    // Traiter chaque ligne de manière séquentielle pour éviter les problèmes d'async
-    lines.forEach((line) => {
-      const trimmedLine = line.trim();
-      if (trimmedLine && trimmedLine.startsWith("![[")) {
-        // Version synchrone pour éviter les problèmes avec forEach + async
-        this.processGridImageSync(trimmedLine, container, ctx.sourcePath);
-      }
+    
+    // Extraire les wikilinks (même multiligne)
+    const wikilinks = this.extractWikilinks(source);
+    
+    const promises = wikilinks.map((wikilink) => {
+      return this.processGridImageSync(wikilink, container, ctx.sourcePath);
     });
+
+    Promise.all(promises);
   };
 
-  // CORRECTION: Version synchrone pour éviter les problèmes d'async dans forEach
-  processGridImageSync(
+  // Extraction des wikilinks multiligne
+  private extractWikilinks(source: string): string[] {
+    const wikilinks: string[] = [];
+    let current = '';
+    let inWikilink = false;
+    let bracketCount = 0;
+    
+    for (let i = 0; i < source.length; i++) {
+      const char = source[i];
+      const nextChar = source[i + 1];
+      
+      if (char === '!' && nextChar === '[' && source[i + 2] === '[') {
+        // Début d'un wikilink
+        inWikilink = true;
+        current = '![[';
+        bracketCount = 2;
+        i += 2; // Skip les deux crochets
+      } else if (inWikilink) {
+        current += char;
+        
+        if (char === '[') {
+          bracketCount++;
+        } else if (char === ']') {
+          bracketCount--;
+          
+          if (bracketCount === 0) {
+            // Fin du wikilink
+            wikilinks.push(current);
+            current = '';
+            inWikilink = false;
+          }
+        }
+      }
+    }
+    
+    return wikilinks;
+  }
+
+  // Version asynchrone pour le parsing markdown
+  async processGridImageSync(
     imageSyntax: string,
     container: HTMLElement,
     sourcePath: string
   ) {
-    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
+    // Nettoyer les retours à la ligne et espaces multiples
+    const cleanSyntax = imageSyntax.replace(/\s+/g, ' ').trim();
+    
+    const match = cleanSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
     if (!match) return;
 
     const imagePath = match[1];
@@ -143,12 +185,12 @@ export default class ImageCaptions extends Plugin {
 
     const parsedData = this.parseImageData(img);
 
-    // Traitement synchrone de la figure
-    this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
+    // Traitement asynchrone pour le markdown
+    await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
   }
 
-  // NOUVELLE MÉTHODE: Version synchrone de insertFigureWithCaption pour les grilles
-  insertFigureWithCaptionSync(
+  // Version asynchrone de insertFigureWithCaption pour les grilles avec markdown
+  async insertFigureWithCaptionSync(
     imageEl: HTMLElement,
     outerEl: HTMLElement | Element,
     parsedData: any,
@@ -176,8 +218,13 @@ export default class ImageCaptions extends Plugin {
 
       if (parsedData.caption) {
         const captionSpan = container.createEl("span", { cls: "caption" });
-        // Version simplifiée pour éviter async
-        captionSpan.textContent = parsedData.caption;
+        // Parsing markdown
+        const children = (await renderMarkdown(
+          parsedData.caption,
+          sourcePath,
+          this
+        )) ?? [parsedData.caption];
+        captionSpan.replaceChildren(...children);
       }
     } else {
       container = outerEl.createEl("figure");
@@ -197,13 +244,37 @@ export default class ImageCaptions extends Plugin {
         const figcaption = container.createEl("figcaption", {
           cls: "figcaption",
         });
-        // Version simplifiée pour éviter async
-        figcaption.textContent = parsedData.caption;
+        // Parsing markdown
+        const children = (await renderMarkdown(
+          parsedData.caption,
+          sourcePath,
+          this
+        )) ?? [parsedData.caption];
+        figcaption.replaceChildren(...children);
       }
     }
   }
 
-  // NOUVELLE MÉTHODE: Factorisation des propriétés de style
+  // Clic pour éditer les grilles
+  private addEditOnClickToGrids() {
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement;
+      const gridContainer = target.closest('.figure-grid-container');
+      
+      if (gridContainer) {
+        // Trouver le bouton d'édition du bloc
+        const editButton = gridContainer.parentElement?.querySelector('.edit-block-button') as HTMLElement;
+        
+        if (editButton) {
+          editButton.click();
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }
+    });
+  }
+
+  // Factorisation des propriétés de style
   private applyStyleProperties(container: HTMLElement, parsedData: any) {
     const style: string[] = [];
     if (parsedData.width) style.push(`--width: ${parsedData.width}`);

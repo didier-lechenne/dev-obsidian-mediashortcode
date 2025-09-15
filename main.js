@@ -57,16 +57,14 @@ var filenameExtensionPlaceholder = "%.%";
 var ImageCaptions = class extends import_obsidian2.Plugin {
   constructor() {
     super(...arguments);
-    // CORRECTION: Processor pour les blocs de code figure-grid-container
+    // Processor pour les blocs de code figure-grid-container avec support multiligne
     this.figureGridProcessor = (source, el, ctx) => {
       const container = el.createDiv({ cls: "figure-grid-container" });
-      const lines = source.trim().split("\n");
-      lines.forEach((line) => {
-        const trimmedLine = line.trim();
-        if (trimmedLine && trimmedLine.startsWith("![[")) {
-          this.processGridImageSync(trimmedLine, container, ctx.sourcePath);
-        }
+      const wikilinks = this.extractWikilinks(source);
+      const promises = wikilinks.map((wikilink) => {
+        return this.processGridImageSync(wikilink, container, ctx.sourcePath);
       });
+      Promise.all(promises);
     };
   }
   async onload() {
@@ -85,6 +83,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       this.figureGridProcessor.bind(this)
     );
     this.registerMarkdownPostProcessor(this.externalImageProcessor());
+    this.addEditOnClickToGrids();
     await this.loadSettings();
     this.addSettingTab(new CaptionSettingTab(this.app, this));
     this.observer = new MutationObserver((mutations) => {
@@ -137,9 +136,40 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       childList: true
     });
   }
-  // CORRECTION: Version synchrone pour éviter les problèmes d'async dans forEach
-  processGridImageSync(imageSyntax, container, sourcePath) {
-    const match = imageSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
+  // Extraction des wikilinks multiligne
+  extractWikilinks(source) {
+    const wikilinks = [];
+    let current = "";
+    let inWikilink = false;
+    let bracketCount = 0;
+    for (let i = 0; i < source.length; i++) {
+      const char = source[i];
+      const nextChar = source[i + 1];
+      if (char === "!" && nextChar === "[" && source[i + 2] === "[") {
+        inWikilink = true;
+        current = "![[";
+        bracketCount = 2;
+        i += 2;
+      } else if (inWikilink) {
+        current += char;
+        if (char === "[") {
+          bracketCount++;
+        } else if (char === "]") {
+          bracketCount--;
+          if (bracketCount === 0) {
+            wikilinks.push(current);
+            current = "";
+            inWikilink = false;
+          }
+        }
+      }
+    }
+    return wikilinks;
+  }
+  // Version asynchrone pour le parsing markdown
+  async processGridImageSync(imageSyntax, container, sourcePath) {
+    const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
+    const match = cleanSyntax.match(/!\[\[([^|\]]+)(\|(.+))?\]\]/);
     if (!match) return;
     const imagePath = match[1];
     const params = match[3] || "";
@@ -156,10 +186,11 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     img.src = resolvedPath;
     img.setAttribute("alt", params);
     const parsedData = this.parseImageData(img);
-    this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
+    await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
   }
-  // NOUVELLE MÉTHODE: Version synchrone de insertFigureWithCaption pour les grilles
-  insertFigureWithCaptionSync(imageEl, outerEl, parsedData, sourcePath) {
+  // Version asynchrone de insertFigureWithCaption pour les grilles avec markdown
+  async insertFigureWithCaptionSync(imageEl, outerEl, parsedData, sourcePath) {
+    var _a, _b;
     let container;
     if (parsedData.caption) {
       imageEl.setAttribute("alt", parsedData.caption);
@@ -177,7 +208,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       container.appendChild(imageEl);
       if (parsedData.caption) {
         const captionSpan = container.createEl("span", { cls: "caption" });
-        captionSpan.textContent = parsedData.caption;
+        const children = (_a = await renderMarkdown(
+          parsedData.caption,
+          sourcePath,
+          this
+        )) != null ? _a : [parsedData.caption];
+        captionSpan.replaceChildren(...children);
       }
     } else {
       container = outerEl.createEl("figure");
@@ -193,11 +229,32 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         const figcaption = container.createEl("figcaption", {
           cls: "figcaption"
         });
-        figcaption.textContent = parsedData.caption;
+        const children = (_b = await renderMarkdown(
+          parsedData.caption,
+          sourcePath,
+          this
+        )) != null ? _b : [parsedData.caption];
+        figcaption.replaceChildren(...children);
       }
     }
   }
-  // NOUVELLE MÉTHODE: Factorisation des propriétés de style
+  // Clic pour éditer les grilles
+  addEditOnClickToGrids() {
+    document.addEventListener("click", (event) => {
+      var _a;
+      const target = event.target;
+      const gridContainer = target.closest(".figure-grid-container");
+      if (gridContainer) {
+        const editButton = (_a = gridContainer.parentElement) == null ? void 0 : _a.querySelector(".edit-block-button");
+        if (editButton) {
+          editButton.click();
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }
+    });
+  }
+  // Factorisation des propriétés de style
   applyStyleProperties(container, parsedData) {
     const style = [];
     if (parsedData.width) style.push(`--width: ${parsedData.width}`);
