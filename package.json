@@ -1,6 +1,6 @@
 {
 	"name": "mediashortcode",
-	"version": "1.0.2",
+	"version": "1.0.0",
 	"description": "Adds captions to images when there is alt-text specified",
 	"main": "main.js",
 	"scripts": {
