@@ -118,11 +118,34 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
             }
           });
         }
+        if (rec.type === "attributes" && rec.target instanceof HTMLElement) {
+          const img = rec.target;
+          if ((img.tagName === "IMG" || img.tagName === "VIDEO") && rec.attributeName === "alt") {
+            setTimeout(async () => {
+              var _a;
+              const parent = img.parentElement;
+              if (parent && parent.nodeName === "FIGURE") {
+                const figCaption = parent.querySelector("figcaption");
+                const parsedData = this.parseImageData(img);
+                if (figCaption && parsedData.caption) {
+                  const children = (_a = await renderMarkdown(
+                    parsedData.caption,
+                    "",
+                    this
+                  )) != null ? _a : [parsedData.caption];
+                  figCaption.replaceChildren(...children);
+                }
+              }
+            }, 10);
+          }
+        }
       });
     });
     this.observer.observe(document.body, {
       subtree: true,
-      childList: true
+      childList: true,
+      attributes: true,
+      attributeFilter: ["alt"]
     });
   }
   extractWikilinks(source) {
@@ -351,6 +374,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         );
         result.caption = (match == null ? void 0 : match[1]) || "";
       } catch (e) {
+        console.warn("Invalid regex in settings:", this.settings.captionRegex);
       }
     }
     if (result.caption === filenamePlaceholder) {
@@ -372,6 +396,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     const filename = src.split("/").pop() || src;
     const nameWithoutExt = filename.replace(/\.[^.]+$/, "");
     return nameWithoutExt.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  }
+  preProcessor(source, info) {
+    return source.replace(/!\[\[([^\]]+?)\n([^\]]*?)\]\]/g, (match, imagePath, params) => {
+      const cleanParams = params.replace(/\n/g, "").replace(/\s*\|\s*/g, "|").trim();
+      return `![[${imagePath.trim()}|${cleanParams}]]`;
+    });
   }
   getCaptionText(img) {
     const parsedData = this.parseImageData(img);
@@ -403,16 +433,20 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const filename = (_a = src.split("/").pop()) == null ? void 0 : _a.split("?")[0];
       if (!filename) return this.parseImageData(img);
       const wikilinks = this.extractWikilinks(content);
+      console.log("Extracted wikilinks:", wikilinks);
       const matchingWikilink = wikilinks.find((link) => {
         var _a2;
         const linkPath = (_a2 = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/)) == null ? void 0 : _a2[1];
         return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
       });
+      console.log("Matching wikilink:", matchingWikilink);
       if (matchingWikilink) {
         const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
+          console.log("Match[2]:", match[2]);
           const tempImg = document.createElement("img");
           const cleanAlt = match[2] ? match[2].replace(/\s+/g, " ").trim() : "";
+          console.log("Clean alt:", cleanAlt);
           tempImg.setAttribute("alt", cleanAlt);
           tempImg.setAttribute("src", src);
           return this.parseImageData(tempImg);
