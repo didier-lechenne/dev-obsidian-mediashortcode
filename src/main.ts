@@ -80,12 +80,39 @@ export default class ImageCaptions extends Plugin {
               }
             });
         }
+        // Watch for attribute changes on images
+        if (rec.type === "attributes" && rec.target instanceof HTMLElement) {
+          const img = rec.target as HTMLElement;
+          if ((img.tagName === "IMG" || img.tagName === "VIDEO") && rec.attributeName === "alt") {
+            // Re-process the image when alt attribute changes
+            setTimeout(async () => {
+              const parent = img.parentElement;
+              if (parent && parent.nodeName === "FIGURE") {
+                const figCaption = parent.querySelector("figcaption");
+                const parsedData = this.parseImageData(img);
+                if (figCaption && parsedData.caption) {
+                  const children = (await renderMarkdown(
+                    parsedData.caption,
+                    "",
+                    this
+                  )) ?? [parsedData.caption];
+                  figCaption.replaceChildren(...children);
+                }
+              }
+            }, 10);
+          }
+        }
       });
     });
     this.observer.observe(document.body, {
       subtree: true,
       childList: true,
+      attributes: true,
+      attributeFilter: ["alt"]
     });
+
+    // Additional observer for multiline wikilinks processing
+    // Note: Multiline wikilinks only work in columnGrid blocks
   }
 
   figureGridProcessor = (source: string, el: HTMLElement, ctx: any) => {
@@ -365,7 +392,7 @@ export default class ImageCaptions extends Plugin {
         );
         result.caption = match?.[1] || "";
       } catch (e) {
-        // console.warn("Invalid regex in settings:", this.settings.captionRegex);
+        console.warn("Invalid regex in settings:", this.settings.captionRegex);
       }
     }
 
@@ -395,6 +422,14 @@ export default class ImageCaptions extends Plugin {
       .replace(/[^a-z0-9]/g, "-")
       .replace(/-+/g, "-")
       .replace(/^-|-$/g, "");
+  }
+
+  preProcessor(source: string, info: any) {
+    // Normalize multiline wikilinks to single line before Obsidian parsing
+    return source.replace(/!\[\[([^\]]+?)\n([^\]]*?)\]\]/g, (match, imagePath, params) => {
+      const cleanParams = params.replace(/\n/g, '').replace(/\s*\|\s*/g, '|').trim();
+      return `![[${imagePath.trim()}|${cleanParams}]]`;
+    });
   }
 
   getCaptionText(img: HTMLElement | Element) {
@@ -435,22 +470,22 @@ export default class ImageCaptions extends Plugin {
       if (!filename) return this.parseImageData(img);
       
       const wikilinks = this.extractWikilinks(content);
-      // console.log('Extracted wikilinks:', wikilinks);
+      console.log('Extracted wikilinks:', wikilinks);
       
       const matchingWikilink = wikilinks.find(link => {
         const linkPath = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/)?.[1];
         return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
       });
       
-      // console.log('Matching wikilink:', matchingWikilink);
+      console.log('Matching wikilink:', matchingWikilink);
       
       if (matchingWikilink) {
         const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
-          // console.log('Match[2]:', match[2]);
+          console.log('Match[2]:', match[2]);
           const tempImg = document.createElement('img');
           const cleanAlt = match[2] ? match[2].replace(/\s+/g, ' ').trim() : '';
-          // console.log('Clean alt:', cleanAlt);
+          console.log('Clean alt:', cleanAlt);
           tempImg.setAttribute('alt', cleanAlt);
           tempImg.setAttribute('src', src);
           return this.parseImageData(tempImg);
