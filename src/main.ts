@@ -444,7 +444,9 @@ export default class ImageCaptions extends Plugin {
         const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
           const tempImg = document.createElement('img');
-          tempImg.setAttribute('alt', match[2] || '');
+          // Clean whitespace and normalize the alt text
+          const cleanAlt = match[2] ? match[2].replace(/\s+/g, ' ').trim() : '';
+          tempImg.setAttribute('alt', cleanAlt);
           tempImg.setAttribute('src', src);
           return this.parseImageData(tempImg);
         }
