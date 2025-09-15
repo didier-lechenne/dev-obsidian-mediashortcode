@@ -19,70 +19,23 @@ export default class ImageCaptions extends Plugin {
   observer: MutationObserver;
 
   async onload() {
+    await this.loadSettings();
+    this.addSettingTab(new CaptionSettingTab(this.app, this));
+
     this.registerMarkdownCodeBlockProcessor(
       "columnGrid",
       this.figureGridProcessor.bind(this)
     );
     this.registerMarkdownPostProcessor(this.externalImageProcessor());
     this.addEditOnClickToGrids();
-    await this.loadSettings();
-    this.addSettingTab(new CaptionSettingTab(this.app, this));
 
     this.observer = new MutationObserver((mutations: MutationRecord[]) => {
       mutations.forEach((rec: MutationRecord) => {
         if (rec.type === "childList") {
-          (<Element>rec.target)
-            .querySelectorAll(".image-embed, .video-embed")
-            .forEach(async (imageEmbedContainer) => {
-              const img = imageEmbedContainer.querySelector("img, video");
-              const width = imageEmbedContainer.getAttribute("width") || "";
-              const parsedData = this.parseImageData(imageEmbedContainer);
-              if (parsedData.caption) {
-                imageEmbedContainer.setAttribute("alt", parsedData.caption);
-              }
-              if (!img) return;
-              const figure = imageEmbedContainer.querySelector("figure");
-              const figCaption = imageEmbedContainer.querySelector("figcaption");
-              if (figure || img.parentElement?.nodeName === "FIGURE") {
-                if (figCaption && parsedData.caption) {
-                  const children = (await this.renderMarkdown(parsedData.caption, "")) ?? [parsedData.caption];
-                  figCaption.replaceChildren(...children);
-                } else if (!parsedData.caption) {
-                  imageEmbedContainer.appendChild(img);
-                  figure?.remove();
-                }
-              } else {
-                if (parsedData.caption && parsedData.caption !== imageEmbedContainer.getAttribute("src")) {
-                  await this.insertFigureWithCaption(img as HTMLElement, imageEmbedContainer, parsedData, "");
-                }
-              }
-              if (width) {
-                img.setAttribute("width", width);
-              } else {
-                img.removeAttribute("width");
-              }
-            });
+          this.processChildListChanges(rec);
         }
-        // Watch for attribute changes on images
         if (rec.type === "attributes" && rec.target instanceof HTMLElement) {
-          const img = rec.target as HTMLElement;
-          if ((img.tagName === "IMG" || img.tagName === "VIDEO") && (rec.attributeName === "alt" || rec.attributeName === "src")) {
-            setTimeout(async () => {
-              const parent = img.parentElement;
-              if (parent && parent.nodeName === "FIGURE") {
-                const figCaption = parent.querySelector("figcaption");
-                const parsedData = this.parseImageData(img);
-                if (figCaption && parsedData.caption) {
-                  const children = (await this.renderMarkdown(parsedData.caption, "")) ?? [parsedData.caption];
-                  figCaption.replaceChildren(...children);
-                }
-                // Mise à jour dynamique des classes
-                if (parsedData.class && parsedData.class.length > 0) {
-                  this.updateImageClasses(img, parsedData.class);
-                }
-              }
-            }, 10);
-          }
+          this.processAttributeChanges(rec);
         }
       });
     });
@@ -91,19 +44,173 @@ export default class ImageCaptions extends Plugin {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["alt", "src"]
+      attributeFilter: ["alt", "src"],
     });
   }
 
-  // Fonction pour mettre à jour les classes dynamiquement
-  updateImageClasses(img: HTMLElement, newClassList: string[]) {
-    const parentFigure = img.closest('figure, span.imagenote');
-    if (parentFigure) {
-      // Supprime les anciennes classes (sauf 'figure' ou 'imagenote')
-      const baseClass = parentFigure.classList.contains('figure') ? 'figure' : 'imagenote';
-      parentFigure.classList.value = baseClass;
-      // Ajoute les nouvelles classes
-      parentFigure.classList.add(...newClassList);
+  processChildListChanges(rec: MutationRecord) {
+    (<Element>rec.target)
+      .querySelectorAll(".image-embed, .video-embed, .internal-embed")
+      .forEach(async (embedContainer) => {
+        const img = embedContainer.querySelector("img, video");
+        if (!img) return;
+
+        const altText = embedContainer.getAttribute("alt") || "";
+        const parsedAlt = this.parseAltAttributes(altText);
+
+        if (parsedAlt.caption) {
+          embedContainer.setAttribute("alt", parsedAlt.caption);
+        }
+
+        const figure = embedContainer.querySelector("figure");
+        const figCaption = embedContainer.querySelector("figcaption");
+
+        if (figure || img.parentElement?.nodeName === "FIGURE") {
+          if (figCaption && parsedAlt.caption) {
+            const children = await this.renderMarkdown(parsedAlt.caption, "");
+            figCaption.replaceChildren(...children);
+          }
+        } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
+          await this.insertFigureWithCaption(img as HTMLElement, embedContainer, parsedAlt, "");
+        }
+      });
+  }
+
+  processAttributeChanges(rec: MutationRecord) {
+    const target = rec.target as HTMLElement;
+
+    if (target.classList.contains("internal-embed") && rec.attributeName === "alt") {
+      const altText = target.getAttribute("alt") || "";
+      const parsedAlt = this.parseAltAttributes(altText);
+      const img = target.querySelector("img, video");
+
+      if (img) {
+        const parentFigure = img.closest("figure");
+        if (parentFigure && parsedAlt.class.length > 0) {
+          parentFigure.classList.value = "figure";
+          parsedAlt.class.forEach((cls: string) => parentFigure.classList.add(cls));
+        }
+      }
+    }
+
+    if ((target.tagName === "IMG" || target.tagName === "VIDEO") && (rec.attributeName === "alt" || rec.attributeName === "src")) {
+      setTimeout(async () => {
+        const parent = target.parentElement;
+        if (parent && parent.nodeName === "FIGURE") {
+          const figCaption = parent.querySelector("figcaption");
+          const parsedData = this.parseImageData(target);
+          if (figCaption && parsedData.caption) {
+            const children = await this.renderMarkdown(parsedData.caption, "");
+            figCaption.replaceChildren(...children);
+          }
+        }
+      }, 10);
+    }
+  }
+
+  parseAltAttributes(altText: string) {
+    const result = {
+      caption: "",
+      class: [] as string[],
+      width: undefined as string | undefined,
+    };
+
+    if (!altText) return result;
+
+    const parts = altText.split("|").map((part) => part.trim());
+
+    for (const part of parts) {
+      if (part.includes(":")) {
+        const [key, ...valueParts] = part.split(":");
+        const value = valueParts.join(":").trim();
+
+        switch (key.toLowerCase()) {
+          case "caption":
+            result.caption = value;
+            break;
+          case "class":
+            result.class = value.split(",").map((cls) => cls.trim());
+            break;
+          case "width":
+            result.width = value;
+            break;
+        }
+      } else {
+        if (!result.caption) {
+          result.caption = part;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  parseImageData(img: HTMLElement | Element) {
+    const altText = img.getAttribute("alt") || "";
+    return this.parseAltAttributes(altText);
+  }
+
+  async insertFigureWithCaption(
+    imageEl: HTMLElement,
+    outerEl: HTMLElement | Element,
+    parsedData: any,
+    sourcePath: string
+  ) {
+    let container: HTMLElement;
+
+    if (parsedData.caption) {
+      imageEl.setAttribute("alt", parsedData.caption);
+    } else {
+      imageEl.removeAttribute("alt");
+    }
+
+    container = outerEl.createEl("figure");
+    container.addClass("figure");
+
+    if (parsedData.class && parsedData.class.length > 0) {
+      parsedData.class.forEach((cls: string) => container.addClass(cls));
+    }
+
+    container.appendChild(imageEl);
+
+    if (parsedData.caption) {
+      const figcaption = container.createEl("figcaption", {
+        cls: "figcaption",
+      });
+      const children = await this.renderMarkdown(parsedData.caption, sourcePath);
+      figcaption.replaceChildren(...children);
+    }
+  }
+
+  async insertFigureWithCaptionSync(
+    imageEl: HTMLElement,
+    outerEl: HTMLElement | Element,
+    parsedData: any,
+    sourcePath: string
+  ) {
+    let container: HTMLElement;
+
+    if (parsedData.caption) {
+      imageEl.setAttribute("alt", parsedData.caption);
+    } else {
+      imageEl.removeAttribute("alt");
+    }
+
+    container = outerEl.createEl("figure");
+    container.addClass("figure");
+
+    if (parsedData.class && parsedData.class.length > 0) {
+      parsedData.class.forEach((cls: string) => container.addClass(cls));
+    }
+
+    container.appendChild(imageEl);
+
+    if (parsedData.caption) {
+      const figcaption = container.createEl("figcaption", {
+        cls: "figcaption",
+      });
+      const children = await this.renderMarkdown(parsedData.caption, sourcePath);
+      figcaption.replaceChildren(...children);
     }
   }
 
@@ -119,7 +226,7 @@ export default class ImageCaptions extends Plugin {
 
   private extractWikilinks(source: string): string[] {
     const wikilinks: string[] = [];
-    let current = '';
+    let current = "";
     let inWikilink = false;
     let bracketCount = 0;
 
@@ -127,22 +234,22 @@ export default class ImageCaptions extends Plugin {
       const char = source[i];
       const nextChar = source[i + 1];
 
-      if (char === '!' && nextChar === '[' && source[i + 2] === '[') {
+      if (char === "!" && nextChar === "[") {
         inWikilink = true;
-        current = '![[';
-        bracketCount = 2;
-        i += 2;
+        current = "![";
+        bracketCount = 1;
+        i += 1;
       } else if (inWikilink) {
         current += char;
 
-        if (char === '[') {
+        if (char === "[") {
           bracketCount++;
-        } else if (char === ']') {
+        } else if (char === "]") {
           bracketCount--;
 
           if (bracketCount === 0) {
             wikilinks.push(current);
-            current = '';
+            current = "";
             inWikilink = false;
           }
         }
@@ -153,9 +260,10 @@ export default class ImageCaptions extends Plugin {
   }
 
   async processGridImageSync(imageSyntax: string, container: HTMLElement, sourcePath: string) {
-    const cleanSyntax = imageSyntax.replace(/\s+/g, ' ').trim();
-    const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
+    const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
+    const match = cleanSyntax.match(/!\[\[([^\|\]]+?)(?:\|([^\]]*?))?\]\]/);
     if (!match) return;
+
     const imagePath = match[1].trim();
     const params = match[2] || "";
     const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
@@ -163,65 +271,28 @@ export default class ImageCaptions extends Plugin {
       console.warn(`Fichier introuvable : ${imagePath}`);
       return;
     }
+
     const resolvedPath = this.app.vault.getResourcePath(abstractFile);
     const img = container.createEl("img");
     img.src = resolvedPath;
     img.setAttribute("alt", params);
-    const parsedData = this.parseImageData(img);
+
+    const parsedData = this.parseAltAttributes(params);
     await this.insertFigureWithCaptionSync(img, container, parsedData, sourcePath);
   }
 
-  async insertFigureWithCaptionSync(imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
-    let container: HTMLElement;
-    if (parsedData.caption) {
-      imageEl.setAttribute("alt", parsedData.caption);
-    } else {
-      imageEl.removeAttribute("alt");
-    }
-    if (parsedData.dataNom === "imagenote") {
-      container = outerEl.createEl("span");
-      container.addClass("imagenote");
-      container.setAttribute("id", parsedData.id);
-      container.setAttribute("data-src", imageEl.getAttribute("src") || "");
-      if (parsedData.class && parsedData.class.length > 0) {
-        parsedData.class.forEach((cls: string) => container.addClass(cls));
-      }
-      container.appendChild(imageEl);
-      if (parsedData.caption) {
-        const captionSpan = container.createEl("span", { cls: "caption" });
-        const children = (await this.renderMarkdown(parsedData.caption, sourcePath)) ?? [parsedData.caption];
-        captionSpan.replaceChildren(...children);
-      }
-    } else {
-      container = outerEl.createEl("figure");
-      container.addClass("figure");
-      container.setAttribute("data-nom", parsedData.dataNom);
-      container.setAttribute("id", parsedData.id);
-      if (parsedData.class && parsedData.class.length > 0) {
-        parsedData.class.forEach((cls: string) => container.addClass(cls));
-      }
-      this.applyStyleProperties(container, parsedData);
-      container.appendChild(imageEl);
-      if (parsedData.caption) {
-        const figcaption = container.createEl("figcaption", { cls: "figcaption" });
-        const children = (await this.renderMarkdown(parsedData.caption, sourcePath)) ?? [parsedData.caption];
-        figcaption.replaceChildren(...children);
-      }
-    }
-  }
-
   private addEditOnClickToGrids() {
-    document.addEventListener('click', (event) => {
+    document.addEventListener("click", (event) => {
       const target = event.target as HTMLElement;
-      const gridContainer = target.closest('.columnGrid');
+      const gridContainer = target.closest(".columnGrid");
 
       if (gridContainer) {
-        let editButton = gridContainer.parentElement?.querySelector('.edit-block-button') as HTMLElement;
+        let editButton = gridContainer.parentElement?.querySelector(".edit-block-button") as HTMLElement;
 
         if (!editButton) {
           let parent = gridContainer.parentElement;
           while (parent && !editButton) {
-            editButton = parent.querySelector('.edit-block-button') as HTMLElement;
+            editButton = parent.querySelector(".edit-block-button") as HTMLElement;
             parent = parent.parentElement;
           }
         }
@@ -235,293 +306,30 @@ export default class ImageCaptions extends Plugin {
     });
   }
 
-  private applyStyleProperties(container: HTMLElement, parsedData: any) {
-    const style: string[] = [];
-    if (parsedData.width) style.push(`--width: ${parsedData.width}`);
-    if (parsedData.printwidth) style.push(`--print-width: ${parsedData.printwidth}`);
-    if (parsedData.col) style.push(`--col: ${parsedData.col}`);
-    if (parsedData.printcol) style.push(`--print-col: ${parsedData.printcol}`);
-    if (parsedData.imgX) style.push(`--img-x: ${parsedData.imgX}`);
-    if (parsedData.imgY) style.push(`--img-y: ${parsedData.imgY}`);
-    if (parsedData.imgW) style.push(`--img-w: ${parsedData.imgW}`);
-    if (style.length > 0) {
-      container.setAttribute("style", style.join("; "));
-    }
-  }
-
-  parseImageData(img: HTMLElement | Element) {
-    let altText = img.getAttribute("alt") || "";
-    const src = img.getAttribute("src") || "";
-    const result = {
-      dataNom: "image",
-      caption: "",
-      width: undefined as string | undefined,
-      printwidth: undefined as string | undefined,
-      col: undefined as string | undefined,
-      printcol: undefined as string | undefined,
-      class: [] as string[],
-      poster: undefined as string | undefined,
-      imgX: undefined as string | undefined,
-      imgY: undefined as string | undefined,
-      imgW: undefined as string | undefined,
-      id: this.generateSlug(src),
-    };
-    const edge = altText.replace(/ > /, "#");
-    if (altText === src || edge === src) {
-      result.caption = "";
-      return result;
-    }
-    if (altText.includes(":")) {
-      const parts = altText.split("|").map((part) => part.trim());
-
-      for (const part of parts) {
-        if (part.includes(":")) {
-          const [key, ...valueParts] = part.split(":");
-          const value = valueParts.join(":").trim();
-          switch (key.toLowerCase()) {
-            case "caption":
-              result.caption = value;
-              break;
-            case "type":
-            case "dataNom":
-              if (["imagenote", "image", "imageGrid", "figure", "video"].includes(value)) {
-                result.dataNom = value;
-              }
-              break;
-            case "width":
-              result.width = value;
-              break;
-            case "print-width":
-            case "printwidth":
-            case "printWidth":
-              result.printwidth = value;
-              break;
-            case "col":
-              result.col = value;
-              break;
-            case "print-col":
-            case "printcol":
-            case "printCol":
-              result.printcol = value;
-              break;
-            case "class":
-              result.class = value.split(",").map((c) => c.trim());
-              break;
-            case "poster":
-              result.poster = value;
-              break;
-            case "imgx":
-            case "imgX":
-            case "img-x":
-              result.imgX = value;
-              break;
-            case "imgy":
-            case "imgY":
-            case "img-y":
-              result.imgY = value;
-              break;
-            case "imgw":
-            case "imgW":
-            case "img-w":
-              result.imgW = value;
-              break;
-          }
-        } else {
-          if (!result.caption && part) {
-            result.caption = part;
-          }
-        }
-      }
-    } else {
-      result.caption = altText;
-    }
-    if (this.settings.captionRegex && result.caption) {
-      try {
-        const match = result.caption.match(new RegExp(this.settings.captionRegex));
-        result.caption = match?.[1] || "";
-      } catch (e) {
-        console.warn("Invalid regex in settings:", this.settings.captionRegex);
-      }
-    }
-    if (result.caption === filenamePlaceholder) {
-      const match = src.match(/[^\\/]+(?=\.\w+$)|[^\\/]+$/);
-      result.caption = match?.[0] || "";
-    } else if (result.caption === filenameExtensionPlaceholder) {
-      const match = src.match(/[^\\/]+$/);
-      result.caption = match?.[0] || "";
-    } else if (result.caption === "\\" + filenamePlaceholder) {
-      result.caption = filenamePlaceholder;
-    }
-    result.caption = result.caption.replace(/<<(.*?)>>/g, (_, linktext) => "[[" + linktext + "]]");
-    return result;
-  }
-
-  generateSlug(src: string): string {
-    const filename = src.split("/").pop() || src;
-    const nameWithoutExt = filename.replace(/\.[^.]+$/, "");
-    return nameWithoutExt
-      .toLowerCase()
-      .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-")
-      .replace(/^-|-$/g, "");
-  }
-
-  preProcessor(source: string, info: any) {
-    return source.replace(/!\[\[([^\]]+?)\n([^\]]*?)\]\]/g, (match, imagePath, params) => {
-      const cleanParams = params.replace(/\n/g, '').replace(/\s*\|\s*/g, '|').trim();
-      return `![[${imagePath.trim()}|${cleanParams}]]`;
-    });
-  }
-
-  getCaptionText(img: HTMLElement | Element) {
-    const parsedData = this.parseImageData(img);
-    return parsedData.caption;
-  }
-
   externalImageProcessor(): MarkdownPostProcessor {
     return (el, ctx) => {
       el.findAll("img:not(.emoji), video").forEach(async (img) => {
-        const parsedData = await this.parseImageDataFromContext(img, ctx);
+        const altText = img.getAttribute("alt") || "";
+        const parsedData = this.parseAltAttributes(altText);
         const parent = img.parentElement;
-        if (parent && parent?.nodeName !== "FIGURE" && parsedData.caption && parsedData.caption !== img.getAttribute("src")) {
+
+        if (parent && parent.nodeName !== "FIGURE" && parsedData.caption && parsedData.caption !== img.getAttribute("src")) {
           await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath);
         }
       });
     };
   }
 
-  async parseImageDataFromContext(img: HTMLElement, ctx: any) {
-    try {
-      const src = img.getAttribute('src');
-      const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
-      if (!src || !file) return this.parseImageData(img);
-
-      const content = await this.app.vault.read(file as TFile);
-      const filename = src.split('/').pop()?.split('?')[0];
-      if (!filename) return this.parseImageData(img);
-
-      const wikilinks = this.extractWikilinks(content);
-      const matchingWikilink = wikilinks.find(link => {
-        const linkPath = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/)?.[1];
-        return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
-      });
-
-      if (matchingWikilink) {
-        const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
-        if (match) {
-          const tempImg = document.createElement('img');
-          const cleanAlt = match[2] ? match[2].replace(/\s+/g, ' ').trim() : '';
-          tempImg.setAttribute('alt', cleanAlt);
-          tempImg.setAttribute('src', src);
-          return this.parseImageData(tempImg);
-        }
-      }
-
-      return this.parseImageData(img);
-    } catch {
-      return this.parseImageData(img);
-    }
-  }
-
-  async insertFigureWithCaption(imageEl: HTMLElement, outerEl: HTMLElement | Element, parsedData: any, sourcePath: string) {
-    let container: HTMLElement;
-    if (parsedData.caption) {
-      imageEl.setAttribute("alt", parsedData.caption);
-    } else {
-      imageEl.removeAttribute("alt");
-    }
-    if (parsedData.dataNom === "imagenote") {
-      container = outerEl.createEl("span");
-      container.addClass("imagenote");
-      container.setAttribute("id", parsedData.id);
-      container.setAttribute("data-src", imageEl.getAttribute("src") || "");
-      if (parsedData.class && parsedData.class.length > 0) {
-        parsedData.class.forEach((cls: string) => container.addClass(cls));
-      }
-      container.appendChild(imageEl);
-      if (parsedData.caption) {
-        const captionSpan = container.createEl("span", { cls: "caption" });
-        const children = (await this.renderMarkdown(parsedData.caption, sourcePath)) ?? [parsedData.caption];
-        captionSpan.replaceChildren(...children);
-      }
-    } else if (parsedData.dataNom === "video") {
-      container = outerEl.createEl("figure");
-      container.addClass("videofigure");
-      container.setAttribute("data-src", imageEl.getAttribute("src") || "");
-      if (parsedData.class && parsedData.class.length > 0) {
-        parsedData.class.forEach((cls: string) => container.addClass(cls));
-      }
-      this.applyStyleProperties(container, parsedData);
-      const videoDiv = container.createEl("div", { cls: "video" });
-      if (parsedData.poster) {
-        videoDiv.setAttribute("style", `background-image: url(${parsedData.poster})`);
-      }
-      const src = imageEl.getAttribute("src") || "";
-      const videoContent = this.createVideoContent(src);
-      if (videoContent) {
-        videoDiv.innerHTML = videoContent;
-      } else {
-        videoDiv.appendChild(imageEl);
-      }
-      if (parsedData.caption) {
-        const children = (await this.renderMarkdown(parsedData.caption, sourcePath)) ?? [parsedData.caption];
-        container.createEl("figcaption", { cls: "figcaption" }).replaceChildren(...children);
-      }
-    } else {
-      container = outerEl.createEl("figure");
-      container.addClass("figure");
-      container.setAttribute("data-nom", parsedData.dataNom);
-      container.setAttribute("id", parsedData.id);
-      if (parsedData.class && parsedData.class.length > 0) {
-        parsedData.class.forEach((cls: string) => container.addClass(cls));
-      }
-      this.applyStyleProperties(container, parsedData);
-      if (parsedData.poster && imageEl.tagName.toLowerCase() === "video") {
-        imageEl.setAttribute("poster", parsedData.poster);
-      }
-      container.appendChild(imageEl);
-      if (parsedData.caption) {
-        const children = (await this.renderMarkdown(parsedData.caption, sourcePath)) ?? [parsedData.caption];
-        container.createEl("figcaption", { cls: "figcaption" }).replaceChildren(...children);
-      }
-    }
-  }
-
-  createVideoContent(url: string): string | null {
-    if (url.includes("yout")) {
-      return this.createYouTubeEmbed(url);
-    }
-    if (url.includes("vimeo")) {
-      return this.createVimeoEmbed(url);
-    }
-    return null;
-  }
-
-  createYouTubeEmbed(url: string): string | null {
-    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]+)/);
-    if (!match) return null;
-    const videoId = match[1];
-    const src = `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`;
-    return `<youtube-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></youtube-embed>`;
-  }
-
-  createVimeoEmbed(url: string): string | null {
-    const match = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)([0-9]+)/);
-    if (!match) return null;
-    const videoId = match[1];
-    const src = `https://player.vimeo.com/video/${videoId}?autoplay=1&rel=0`;
-    return `<vimeo-embed><iframe scrolling='no' width='640' height='360' allow='autoplay; fullscreen' src='' data-src='${src}'></iframe><button aria-label='Play video'></button></vimeo-embed>`;
-  }
-
-  async renderMarkdown(markdown: string, sourcePath: string): Promise<NodeList | undefined> {
+  async renderMarkdown(markdown: string, sourcePath: string): Promise<Node[]> {
     const el = createDiv();
     await MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, this);
-    for (const child of el.children) {
-      if (child.tagName.toLowerCase() === "p") {
-        return child.childNodes;
-      }
+
+    const nodes: Node[] = [];
+    for (const child of el.childNodes) {
+      nodes.push(child);
     }
-    return;
+
+    return nodes.length > 0 ? nodes : [document.createTextNode(markdown)];
   }
 
   async loadSettings() {
