@@ -210,7 +210,12 @@ export default class ImageCaptions extends Plugin {
         cls: "figcaption",
       });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      figcaption.replaceChildren(...children);
+      if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+        const pElement = children[0] as HTMLParagraphElement;
+        figcaption.replaceChildren(...Array.from(pElement.childNodes));
+      } else {
+        figcaption.replaceChildren(...children);
+      }
     }
   }
 

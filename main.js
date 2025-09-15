@@ -213,7 +213,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         cls: "figcaption"
       });
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      figcaption.replaceChildren(...children);
+      if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
+        const pElement = children[0];
+        figcaption.replaceChildren(...Array.from(pElement.childNodes));
+      } else {
+        figcaption.replaceChildren(...children);
+      }
     }
   }
   extractWikilinks(source) {
