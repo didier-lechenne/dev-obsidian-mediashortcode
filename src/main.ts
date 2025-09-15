@@ -18,10 +18,19 @@ export default class ImageCaptions extends Plugin {
   observer: MutationObserver;
 
   async onload() {
-
+    document.documentElement.style.setProperty(
+      "--window-width",
+      window.outerWidth + "px"
+    );
+    window.addEventListener("resize", () => {
+      document.documentElement.style.setProperty(
+        "--window-width",
+        window.outerWidth + "px"
+      );
+    });
 
     this.registerMarkdownCodeBlockProcessor(
-      "columnGrid",
+      "figure-grid-container",
       this.figureGridProcessor.bind(this)
     );
 
@@ -90,7 +99,7 @@ export default class ImageCaptions extends Plugin {
   }
 
   figureGridProcessor = (source: string, el: HTMLElement, ctx: any) => {
-    const container = el.createDiv({ cls: "columnGrid" });
+    const container = el.createDiv({ cls: "figure-grid-container" });
     const wikilinks = this.extractWikilinks(source);
     
     const promises = wikilinks.map((wikilink) => {
@@ -231,7 +240,7 @@ export default class ImageCaptions extends Plugin {
   private addEditOnClickToGrids() {
     document.addEventListener('click', (event) => {
       const target = event.target as HTMLElement;
-      const gridContainer = target.closest('.columnGrid');
+      const gridContainer = target.closest('.figure-grid-container');
       
       if (gridContainer) {
         let editButton = gridContainer.parentElement?.querySelector('.edit-block-button') as HTMLElement;
@@ -318,7 +327,6 @@ export default class ImageCaptions extends Plugin {
               break;
             case "print-width":
             case "printwidth":
-            case "printWidth":
               result.printwidth = value;
               break;
             case "col":
@@ -326,7 +334,6 @@ export default class ImageCaptions extends Plugin {
               break;
             case "print-col":
             case "printcol":
-            case "printCol":
               result.printcol = value;
               break;
             case "class":
@@ -336,23 +343,15 @@ export default class ImageCaptions extends Plugin {
               result.poster = value;
               break;
             case "imgx":
-            case "imgX":
-            case "img-x":
               result.imgX = value;
               break;
             case "imgy":
-            case "imgY":
-            case "img-y":
               result.imgY = value;
               break;
             case "imgw":
-            case "imgW":
-            case "img-w":
               result.imgW = value;
               break;
-            case "id":
-              result.id = value;
-              break;
+            // case "id": removed - ID is always auto-generated from filename
           }
         } else {
           // Si pas de ":", considérer comme caption
