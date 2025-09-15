@@ -19,8 +19,6 @@ export default class ImageCaptions extends Plugin {
   observer: MutationObserver;
 
   async onload() {
-
-
     this.registerMarkdownCodeBlockProcessor(
       "columnGrid",
       this.figureGridProcessor.bind(this)
@@ -273,7 +271,6 @@ export default class ImageCaptions extends Plugin {
     let altText = img.getAttribute("alt") || "";
     const src = img.getAttribute("src") || "";
 
-    // Syntaxe unifiée : détection automatique
     const result = {
       dataNom: "image",
       caption: "",
@@ -295,7 +292,6 @@ export default class ImageCaptions extends Plugin {
       return result;
     }
 
-    // Si contient des ":", nouvelle syntaxe structurée
     if (altText.includes(":")) {
       const parts = altText.split("|").map((part) => part.trim());
       
@@ -353,18 +349,15 @@ export default class ImageCaptions extends Plugin {
               break;
           }
         } else {
-          // Si pas de ":", considérer comme caption
           if (!result.caption && part) {
             result.caption = part;
           }
         }
       }
     } else {
-      // Syntaxe simple : tout est caption
       result.caption = altText;
     }
 
-    // Logique existante pour les placeholders
     if (this.settings.captionRegex && result.caption) {
       try {
         const match = result.caption.match(
@@ -442,12 +435,13 @@ export default class ImageCaptions extends Plugin {
       if (!filename) return this.parseImageData(img);
       
       const wikilinks = this.extractWikilinks(content);
-      const matchingWikilink = wikilinks.find(link => 
-        link.includes(filename) || link.includes(src)
-      );
+      const matchingWikilink = wikilinks.find(link => {
+        const linkPath = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/)?.[1];
+        return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
+      });
       
       if (matchingWikilink) {
-        const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
+        const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
           const tempImg = document.createElement('img');
           tempImg.setAttribute('alt', match[2] || '');

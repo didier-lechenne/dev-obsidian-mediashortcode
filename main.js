@@ -404,11 +404,13 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const filename = (_a = src.split("/").pop()) == null ? void 0 : _a.split("?")[0];
       if (!filename) return this.parseImageData(img);
       const wikilinks = this.extractWikilinks(content);
-      const matchingWikilink = wikilinks.find(
-        (link) => link.includes(filename) || link.includes(src)
-      );
+      const matchingWikilink = wikilinks.find((link) => {
+        var _a2;
+        const linkPath = (_a2 = link.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/)) == null ? void 0 : _a2[1];
+        return linkPath && (linkPath.includes(filename) || linkPath.endsWith(filename));
+      });
       if (matchingWikilink) {
-        const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|(.+))?\]\]/);
+        const match = matchingWikilink.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+))?\]\]/);
         if (match) {
           const tempImg = document.createElement("img");
           tempImg.setAttribute("alt", match[2] || "");
