@@ -31,8 +31,46 @@ var import_obsidian2 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
+var DEFAULT_MEDIA_TYPES = {
+  image: {
+    name: "Image",
+    template: '<figure data-grid="image" class="figure {type} {classes}" id="{id}" data-src="{src}">{media}<figcaption class="figcaption">{caption}</figcaption></figure>',
+    extensions: []
+  },
+  imagenote: {
+    name: "Image Note",
+    template: '<span class="{type} {classes}" id="{id}" data-src="{src}">{media}<span class="figcaption">{caption}</span></span>',
+    extensions: []
+  },
+  video: {
+    name: "Video",
+    template: '<span class="{type} {classes}" id="{id}" data-src="{src}">{media}<span class="figcaption">{caption}</span></span>',
+    extensions: [".mp4", ".webm", ".ogg", ".avi", ".mov", ".mkv"]
+  },
+  audio: {
+    name: "Audio",
+    template: '<div class="{type} {classes}" id="{id}" data-src="{src}">{media}<div class="figcaption">{caption}</div></div>',
+    extensions: [".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a"]
+  },
+  pdf: {
+    name: "PDF Document",
+    template: '<div class="{type} {classes}" id="{id}" data-src="{src}">{media}<div class="figcaption">{caption}</div></div>',
+    extensions: [".pdf"]
+  },
+  figure: {
+    name: "Figure",
+    template: '<figure data-grid="image" class="{type} {classes}">{media}<figcaption class="figcaption">{caption}</figcaption></figure>',
+    extensions: []
+  },
+  grid: {
+    name: "Grid",
+    template: '<figure data-grid="image" class="figure {type} {classes}">{media}</figure><figcaption class="figcaption">{caption}</figcaption>',
+    extensions: []
+  }
+};
 var DEFAULT_SETTINGS = {
-  captionRegex: ""
+  captionRegex: "",
+  mediaTypes: DEFAULT_MEDIA_TYPES
 };
 var CaptionSettingTab = class extends import_obsidian.PluginSettingTab {
   constructor(app, plugin) {
@@ -42,355 +80,246 @@ var CaptionSettingTab = class extends import_obsidian.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Advanced settings").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Caption regex").setDesc("For advanced caption parsing, you can add a regex here. The first capturing group will be used as the image caption. This is useful in situations where you might have another plugin or theme adding text to the caption area which you want to strip out. The placeholder example would be used to exclude everything following a pipe character (if one exists).").addText((text) => text.setPlaceholder("^([^|]+)").setValue(this.plugin.settings.captionRegex).onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Media Shortcode Settings").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Caption regex").setDesc("For advanced caption parsing, you can add a regex here. The first capturing group will be used as the image caption.").addText((text) => text.setPlaceholder("^([^|]+)").setValue(this.plugin.settings.captionRegex).onChange(async (value) => {
       this.plugin.settings.captionRegex = value;
       await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Media Types & Templates").setHeading();
+    Object.entries(this.plugin.settings.mediaTypes).forEach(([type, config]) => {
+      new import_obsidian.Setting(containerEl).setName(`${config.name} Template`).setDesc(`HTML template for ${type}. Available variables: {type}, {classes}, {id}, {src}, {media}, {caption}`).addTextArea((text) => {
+        text.setValue(config.template);
+        text.inputEl.style.height = "100px";
+        text.inputEl.style.fontFamily = "monospace";
+        text.onChange(async (value) => {
+          this.plugin.settings.mediaTypes[type].template = value;
+          await this.plugin.saveSettings();
+        });
+      });
+      new import_obsidian.Setting(containerEl).setName(`${config.name} Extensions`).setDesc(`File extensions for auto-detection (comma separated)`).addText((text) => text.setValue(config.extensions.join(", ")).onChange(async (value) => {
+        this.plugin.settings.mediaTypes[type].extensions = value.split(",").map((ext) => ext.trim()).filter((ext) => ext.length > 0);
+        await this.plugin.saveSettings();
+      }));
+    });
+    new import_obsidian.Setting(containerEl).setName("Reset Templates").setDesc("Reset all templates to default values").addButton((button) => button.setButtonText("Reset to Defaults").onClick(async () => {
+      this.plugin.settings.mediaTypes = { ...DEFAULT_MEDIA_TYPES };
+      await this.plugin.saveSettings();
+      this.display();
     }));
   }
 };
 
 // src/main.ts
-var ImageCaptions = class extends import_obsidian2.Plugin {
-  constructor() {
-    super(...arguments);
-    this.figureGridProcessor = (source, el, ctx) => {
-      const container = el.createDiv({ cls: "columnGrid" });
-      const wikilinks = this.extractWikilinks(source);
-      const promises = wikilinks.map((wikilink) => {
-        return this.processGridImage(wikilink, container, ctx.sourcePath);
-      });
-      Promise.all(promises);
-    };
+var TypeDetector = class {
+  constructor(mediaTypes) {
+    this.mediaTypes = mediaTypes;
   }
-  async onload() {
-    await this.loadSettings();
-    this.addSettingTab(new CaptionSettingTab(this.app, this));
-    this.registerMarkdownCodeBlockProcessor(
-      "columnGrid",
-      this.figureGridProcessor.bind(this)
-    );
-    this.registerMarkdownPostProcessor(this.externalImageProcessor());
-    this.addEditOnClickToGrids();
-    this.observer = new MutationObserver((mutations) => {
-      mutations.forEach((rec) => {
-        if (rec.type === "childList") {
-          this.processChildListChanges(rec);
-        }
-        if (rec.type === "attributes" && rec.target instanceof HTMLElement) {
-          this.processAttributeChanges(rec);
-        }
-      });
-    });
-    this.observer.observe(document.body, {
-      subtree: true,
-      childList: true,
-      attributes: true,
-      attributeFilter: ["alt", "src", "data-path"]
-    });
-  }
-  processChildListChanges(rec) {
-    rec.target.querySelectorAll(".image-embed, .video-embed, .internal-embed").forEach(async (embedContainer) => {
-      const img = embedContainer.querySelector("img, video");
-      if (!img) return;
-      const altText = embedContainer.getAttribute("alt") || "";
-      const parsedAlt = this.parseAltAttributes(altText);
-      setTimeout(async () => {
-        var _a;
-        const figure = embedContainer.querySelector("figure");
-        const span = embedContainer.querySelector("span[class*='imagenote'], span[class*='video']");
-        const figCaption = embedContainer.querySelector("figcaption, .caption");
-        if (figure || span || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
-          const targetContainer = span || figure || img.parentElement;
-          if (figCaption && parsedAlt.caption) {
-            const children = await this.renderMarkdown(parsedAlt.caption, "");
-            this.updateCaption(figCaption, children);
-          }
-          if (targetContainer) {
-            this.updateContainerStyles(targetContainer, parsedAlt);
-          }
-        } else if (parsedAlt.caption || parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some((k) => k.startsWith("print-") || k === "img-w")) {
-          await this.insertMediaWithCaption(img, embedContainer, parsedAlt, "");
-        }
-      }, 50);
-    });
-  }
-  processAttributeChanges(rec) {
-    const target = rec.target;
-    if (target.classList.contains("internal-embed") && rec.attributeName === "alt") {
-      const altText = target.getAttribute("alt") || "";
-      const parsedAlt = this.parseAltAttributes(altText);
-      const img = target.querySelector("img, video");
-      if (img) {
-        const parentContainer = img.closest("figure, span[class*='imagenote'], span[class*='video']");
-        if (parentContainer) {
-          if (parsedAlt.class && parsedAlt.class.length > 0) {
-            const baseClass = parsedAlt.dataNom || "figure";
-            parentContainer.classList.value = baseClass;
-            parsedAlt.class.forEach((cls) => parentContainer.classList.add(cls));
-          }
-          this.updateContainerStyles(parentContainer, parsedAlt);
-        }
+  detectFromFilename(filename) {
+    const ext = this.getFileExtension(filename);
+    for (const [typeName, config] of Object.entries(this.mediaTypes)) {
+      if (config.extensions.includes(ext)) {
+        return typeName;
       }
     }
-    if ((target.tagName === "IMG" || target.tagName === "VIDEO") && (rec.attributeName === "alt" || rec.attributeName === "src")) {
-      setTimeout(async () => {
-        const parent = target.parentElement;
-        if (parent && (parent.nodeName === "FIGURE" || parent.classList.contains("imagenote") || parent.classList.contains("video"))) {
-          const caption = parent.querySelector("figcaption, .caption");
-          const parsedData = this.parseAltAttributes(target.getAttribute("alt") || "");
-          if (caption && parsedData.caption) {
-            const children = await this.renderMarkdown(parsedData.caption, "");
-            this.updateCaption(caption, children);
-          }
-          this.updateContainerStyles(parent, parsedData);
-        }
-      }, 10);
-    }
+    return "figure";
   }
-  parseAltAttributes(altText) {
+  detectFromKeyword(params) {
+    const keywords = Object.keys(this.mediaTypes);
+    for (const param of params) {
+      if (keywords.includes(param.toLowerCase())) {
+        return param.toLowerCase();
+      }
+    }
+    return null;
+  }
+  getFileExtension(filename) {
+    const lastDot = filename.lastIndexOf(".");
+    return lastDot === -1 ? "" : filename.substring(lastDot).toLowerCase();
+  }
+};
+var MediaParser = class {
+  constructor(typeDetector) {
+    this.typeDetector = typeDetector;
+  }
+  parseAttributes(altText, filename) {
     const result = {
+      type: "figure",
+      // default type is 'figure'
       caption: "",
-      class: [],
-      width: void 0,
-      col: void 0,
-      "print-col": void 0,
-      "print-width": void 0,
-      "print-row": void 0,
-      "print-height": void 0,
-      "print-x": void 0,
-      "print-y": void 0,
-      "img-w": void 0,
-      dataNom: "figure"
+      classes: []
     };
-    if (!altText) return result;
+    if (!altText) {
+      if (filename) {
+        result.type = this.typeDetector.detectFromFilename(filename);
+      }
+      return result;
+    }
     const cleanedAltText = altText.replace(/\s+/g, " ").trim();
     const parts = cleanedAltText.split("|").map((part) => part.trim());
+    const keywordType = this.typeDetector.detectFromKeyword(parts);
+    if (keywordType) {
+      result.type = keywordType;
+      const keywordIndex = parts.findIndex((p) => p.toLowerCase() === keywordType);
+      if (keywordIndex !== -1) {
+        parts.splice(keywordIndex, 1);
+      }
+    } else if (filename) {
+      result.type = this.typeDetector.detectFromFilename(filename);
+    }
     for (const part of parts) {
       if (part.includes(":")) {
-        const [key, ...valueParts] = part.split(":");
-        const value = valueParts.join(":").trim();
-        switch (key.toLowerCase()) {
-          case "caption":
-            result.caption = value;
-            break;
-          case "class":
-            result.class = value.split(",").map((cls) => cls.trim());
-            break;
-          case "width":
-            result.width = value;
-            break;
-          case "col":
-            result.col = value;
-            break;
-          case "print-col":
-          case "printcol":
-            result["print-col"] = value;
-            break;
-          case "print-width":
-          case "printwidth":
-            result["print-width"] = value;
-            break;
-          case "print-row":
-          case "printrow":
-            result["print-row"] = value;
-            break;
-          case "print-height":
-          case "printheight":
-            result["print-height"] = value;
-            break;
-          case "img-x":
-          case "imgx":
-            result["print-x"] = value;
-            break;
-          case "img-y":
-          case "imgy":
-            result["print-y"] = value;
-            break;
-          case "img-w":
-          case "imgw":
-            result["img-w"] = value;
-            break;
-          case "type":
-          case "datanom":
-            result.dataNom = value;
-            break;
-        }
+        this.parseKeyValuePair(part, result);
       } else if (part && !result.caption) {
         result.caption = part;
       }
     }
     return result;
   }
-  updateContainerStyles(container, parsedData) {
-    const styles = [];
-    if (parsedData.width) {
-      styles.push(`--width: ${parsedData.width}`);
-    }
-    if (parsedData.col) {
-      styles.push(`--col: ${parsedData.col}`);
-    }
-    if (parsedData["print-col"]) {
-      styles.push(`--print-col: ${parsedData["print-col"]}`);
-    }
-    if (parsedData["print-width"]) {
-      styles.push(`--print-width: ${parsedData["print-width"]}`);
-    }
-    if (parsedData["print-row"]) {
-      styles.push(`--print-row: ${parsedData["print-row"]}`);
-    }
-    if (parsedData["print-height"]) {
-      styles.push(`--print-height: ${parsedData["print-height"]}`);
-    }
-    if (parsedData["print-x"]) {
-      styles.push(`--print-x: ${parsedData["print-x"]}`);
-    }
-    if (parsedData["print-y"]) {
-      styles.push(`--print-y: ${parsedData["print-y"]}`);
-    }
-    if (parsedData["img-w"]) {
-      styles.push(`--img-w: ${parsedData["img-w"]}`);
-    }
-    if (styles.length > 0) {
-      container.setAttribute("style", styles.join("; "));
-    } else {
-      container.removeAttribute("style");
+  parseKeyValuePair(part, result) {
+    const [key, ...valueParts] = part.split(":");
+    const value = valueParts.join(":").trim();
+    switch (key.toLowerCase()) {
+      case "caption":
+        result.caption = value;
+        break;
+      case "class":
+        result.classes = value.split(",").map((cls) => cls.trim());
+        break;
+      case "width":
+        result.width = value;
+        break;
+      case "col":
+        result.col = value;
+        break;
+      case "print-col":
+      case "printcol":
+        result["print-col"] = value;
+        break;
+      case "print-width":
+      case "printwidth":
+        result["print-width"] = value;
+        break;
+      case "print-row":
+      case "printrow":
+        result["print-row"] = value;
+        break;
+      case "print-height":
+      case "printheight":
+        result["print-height"] = value;
+        break;
+      case "print-x":
+      case "img-x":
+      case "imgx":
+        result["print-x"] = value;
+        break;
+      case "print-y":
+      case "img-y":
+      case "imgy":
+        result["print-y"] = value;
+        break;
+      case "img-w":
+      case "imgw":
+        result["img-w"] = value;
+        break;
+      default:
+        result[key.toLowerCase()] = value;
+        break;
     }
   }
-  async insertMediaWithCaption(imageEl, outerEl, parsedData, sourcePath) {
-    var _a;
-    let container;
-    if (parsedData.caption) {
-      imageEl.setAttribute("alt", parsedData.caption);
-    } else {
-      imageEl.removeAttribute("alt");
-    }
-    if (parsedData.dataNom === "imagenote" || parsedData.dataNom === "video") {
-      container = outerEl.createEl("span");
-      container.addClass(parsedData.dataNom);
-      const imgSrc = imageEl.getAttribute("src") || "";
-      if (imgSrc) {
-        const filename = ((_a = imgSrc.split("/").pop()) == null ? void 0 : _a.replace(/\./g, "")) || "";
-        const id = `content${filename}`;
-        container.setAttribute("id", id);
-        container.setAttribute("data-src", imgSrc);
-      }
-    } else {
-      container = outerEl.createEl("figure");
-      container.addClass("figure");
-    }
-    if (parsedData.class && parsedData.class.length > 0) {
-      parsedData.class.forEach((cls) => container.addClass(cls));
-    }
-    this.updateContainerStyles(container, parsedData);
-    container.appendChild(imageEl);
-    if (parsedData.caption) {
-      let captionEl;
-      if (parsedData.dataNom === "imagenote" || parsedData.dataNom === "video") {
-        captionEl = container.createEl("span", { cls: "caption" });
+};
+var TemplateEngine = class {
+  render(template, data) {
+    return template.replace(/{type}/g, data.type).replace(/{classes}/g, data.classes).replace(/{id}/g, data.id).replace(/{src}/g, data.src).replace(/{media}/g, data.media).replace(/{caption}/g, data.caption);
+  }
+};
+var MediaRenderer = class {
+  constructor(templateEngine, mediaTypes, plugin) {
+    this.templateEngine = templateEngine;
+    this.mediaTypes = mediaTypes;
+    this.plugin = plugin;
+  }
+  async renderMedia(mediaEl, container, parsedData, sourcePath) {
+    const mediaType = this.mediaTypes[parsedData.type] || this.mediaTypes.figure;
+    const templateData = {
+      type: parsedData.type,
+      classes: parsedData.classes.join(" "),
+      id: this.generateId(mediaEl),
+      src: mediaEl.getAttribute("src") || "",
+      media: "",
+      // Sera remplacé par l'élément réel
+      caption: parsedData.caption
+    };
+    const htmlString = this.templateEngine.render(mediaType.template, templateData);
+    const tempDiv = createDiv();
+    tempDiv.innerHTML = htmlString;
+    const newContainer = tempDiv.firstElementChild;
+    if (newContainer) {
+      if (parsedData.type === "grid") {
+        const allElements = Array.from(tempDiv.children);
+        const figureEl = tempDiv.querySelector("figure");
+        const captionEl = tempDiv.querySelector("figcaption");
+        if (figureEl) {
+          if (parsedData.caption) {
+            mediaEl.setAttribute("alt", parsedData.caption);
+          }
+          figureEl.appendChild(mediaEl);
+          this.applyStyles(figureEl, parsedData);
+        }
+        if (parsedData.caption && captionEl) {
+          const children = await this.renderMarkdown(parsedData.caption, sourcePath);
+          this.updateCaption(captionEl, children);
+          this.applyStyles(captionEl, parsedData);
+        }
+        allElements.forEach((el) => container.appendChild(el));
+        return;
       } else {
-        captionEl = container.createEl("figcaption", { cls: "figcaption" });
-      }
-      const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      this.updateCaption(captionEl, children);
-    }
-  }
-  extractWikilinks(source) {
-    const wikilinks = [];
-    let current = "";
-    let inWikilink = false;
-    let bracketCount = 0;
-    for (let i = 0; i < source.length; i++) {
-      const char = source[i];
-      const nextChar = source[i + 1];
-      if (char === "!" && nextChar === "[") {
-        inWikilink = true;
-        current = "![";
-        bracketCount = 1;
-        i += 1;
-      } else if (inWikilink) {
-        current += char;
-        if (char === "[") {
-          bracketCount++;
-        } else if (char === "]") {
-          bracketCount--;
-          if (bracketCount === 0) {
-            wikilinks.push(current);
-            current = "";
-            inWikilink = false;
+        newContainer.innerHTML = "";
+        if (parsedData.caption) {
+          mediaEl.setAttribute("alt", parsedData.caption);
+        }
+        newContainer.appendChild(mediaEl);
+        if (parsedData.caption) {
+          let captionEl;
+          if (parsedData.type === "imagenote" || parsedData.type === "video") {
+            captionEl = newContainer.createEl("span", { cls: "figcaption" });
+          } else if (parsedData.type === "audio" || parsedData.type === "pdf") {
+            captionEl = newContainer.createEl("div", { cls: "figcaption" });
+          } else {
+            captionEl = newContainer.createEl("figcaption", { cls: "figcaption" });
           }
+          const children = await this.renderMarkdown(parsedData.caption, sourcePath);
+          this.updateCaption(captionEl, children);
         }
       }
+      if (parsedData.type !== "grid") {
+        this.applyStyles(newContainer, parsedData);
+      }
+      if (parsedData.type !== "grid") {
+        container.appendChild(newContainer);
+      }
     }
-    return wikilinks;
   }
-  async processGridImage(imageSyntax, container, sourcePath) {
-    const cleanSyntax = imageSyntax.replace(/\s+/g, " ").trim();
-    const match = cleanSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+?))?\]\]/);
-    if (!match) return;
-    const imagePath = match[1].trim();
-    const params = match[2] ? match[2].trim() : "";
-    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
-    if (!abstractFile) {
-      console.warn(`Fichier introuvable : ${imagePath}`);
-      return;
-    }
-    const resolvedPath = this.app.vault.getResourcePath(abstractFile);
-    const img = container.createEl("img");
-    img.src = resolvedPath;
-    img.setAttribute("alt", params);
-    const parsedData = this.parseAltAttributes(params);
-    await this.insertMediaWithCaption(img, container, parsedData, sourcePath);
+  generateId(mediaEl) {
+    var _a, _b;
+    const src = mediaEl.getAttribute("src") || "";
+    const filename = ((_b = (_a = src.split("/").pop()) == null ? void 0 : _a.replace(/\?.*$/, "")) == null ? void 0 : _b.replace(/\./g, "")) || "";
+    return `content${filename}`;
   }
-  addEditOnClickToGrids() {
-    document.addEventListener("click", (event) => {
-      var _a;
-      const target = event.target;
-      const gridContainer = target.closest(".columnGrid");
-      if (gridContainer) {
-        let editButton = (_a = gridContainer.parentElement) == null ? void 0 : _a.querySelector(".edit-block-button");
-        if (!editButton) {
-          let parent = gridContainer.parentElement;
-          while (parent && !editButton) {
-            editButton = parent.querySelector(".edit-block-button");
-            parent = parent.parentElement;
-          }
-        }
-        if (editButton) {
-          editButton.click();
-          event.preventDefault();
-          event.stopPropagation();
-        }
+  applyStyles(container, parsedData) {
+    const styles = [];
+    const excludedProps = ["type", "caption", "classes"];
+    Object.entries(parsedData).forEach(([key, value]) => {
+      if (typeof value === "string" && !excludedProps.includes(key)) {
+        styles.push(`--${key}: ${value}`);
       }
     });
-  }
-  externalImageProcessor() {
-    return (el, ctx) => {
-      el.findAll("img:not(.emoji), video").forEach(async (img) => {
-        const altText = img.getAttribute("alt") || "";
-        const parsedData = this.parseAltAttributes(altText);
-        const parent = img.parentElement;
-        if (parent && parent.nodeName !== "FIGURE" && !parent.classList.contains("imagenote") && !parent.classList.contains("video") && (parsedData.caption || parsedData.col || parsedData.width || Object.keys(parsedData).some((k) => k.startsWith("print-") || k === "img-w"))) {
-          await this.insertMediaWithCaption(img, parent, parsedData, ctx.sourcePath);
-        }
-      });
-      setTimeout(() => {
-        el.findAll(".internal-embed").forEach(async (embedContainer) => {
-          const img = embedContainer.querySelector("img, video");
-          if (!img) return;
-          const altText = embedContainer.getAttribute("alt") || "";
-          const parsedAlt = this.parseAltAttributes(altText);
-          const existingContainer = img.closest("figure, span[class*='imagenote'], span[class*='video']");
-          if (existingContainer && (parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some((k) => k.startsWith("print-") || k === "img-w"))) {
-            this.updateContainerStyles(existingContainer, parsedAlt);
-          }
-        });
-      }, 100);
-    };
+    if (styles.length > 0) {
+      container.setAttribute("style", styles.join("; "));
+    }
   }
   async renderMarkdown(markdown, sourcePath) {
     const el = createDiv();
-    await import_obsidian2.MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, this);
+    await import_obsidian2.MarkdownRenderer.renderMarkdown(markdown, el, sourcePath, this.plugin);
     const nodes = [];
     for (const child of el.childNodes) {
       nodes.push(child);
@@ -405,13 +334,196 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       captionEl.replaceChildren(...children);
     }
   }
+};
+var ImageCaptions = class extends import_obsidian2.Plugin {
+  constructor() {
+    super(...arguments);
+    this.figureGridProcessor = (source, el, ctx) => {
+      const container = el.createDiv({ cls: "columnGrid" });
+      const wikilinks = this.extractWikilinks(source);
+      Promise.all(wikilinks.map(
+        (wikilink) => this.processGridImage(wikilink, container, ctx.sourcePath)
+      ));
+    };
+  }
+  async onload() {
+    await this.loadSettings();
+    this.typeDetector = new TypeDetector(this.settings.mediaTypes);
+    this.mediaParser = new MediaParser(this.typeDetector);
+    this.templateEngine = new TemplateEngine();
+    this.mediaRenderer = new MediaRenderer(this.templateEngine, this.settings.mediaTypes, this);
+    this.addSettingTab(new CaptionSettingTab(this.app, this));
+    this.registerMarkdownCodeBlockProcessor("columnGrid", this.figureGridProcessor.bind(this));
+    this.registerMarkdownPostProcessor(this.mediaProcessor());
+    this.setupMutationObserver();
+    this.addEditOnClickToGrids();
+  }
+  setupMutationObserver() {
+    this.observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.type === "childList") {
+          this.processChildListChanges(mutation);
+        } else if (mutation.type === "attributes") {
+          this.processAttributeChanges(mutation);
+        }
+      });
+    });
+    this.observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ["alt", "src", "data-path"]
+    });
+  }
+  processChildListChanges(mutation) {
+    setTimeout(() => {
+      mutation.target.querySelectorAll(".image-embed, .video-embed, .internal-embed").forEach(async (embedContainer) => {
+        await this.processEmbedContainer(embedContainer);
+      });
+    }, 100);
+  }
+  processAttributeChanges(mutation) {
+    const target = mutation.target;
+    if (target.classList.contains("internal-embed") && mutation.attributeName === "alt") {
+      setTimeout(() => this.processEmbedContainer(target, true), 100);
+    }
+    if ((target.tagName === "IMG" || target.tagName === "VIDEO" || target.tagName === "AUDIO") && (mutation.attributeName === "alt" || mutation.attributeName === "src")) {
+      setTimeout(() => this.updateExistingMedia(target), 10);
+    }
+  }
+  async processEmbedContainer(embedContainer, force = false) {
+    const mediaEl = embedContainer.querySelector("img, video, audio");
+    if (!mediaEl) return;
+    if (!force && this.isAlreadyProcessed(mediaEl)) return;
+    if (embedContainer.hasAttribute("data-processing")) return;
+    embedContainer.setAttribute("data-processing", "true");
+    if (force) {
+      const existingElements = embedContainer.querySelectorAll("figure, span.imagenote, span.video, span.audio, div.pdf, .grid");
+      existingElements.forEach((el) => el.remove());
+    }
+    const altText = embedContainer.getAttribute("alt") || "";
+    const src = mediaEl.getAttribute("src") || "";
+    const filename = src.split("/").pop() || "";
+    const parsedData = this.mediaParser.parseAttributes(altText, filename);
+    if (this.shouldProcessMedia(parsedData)) {
+      await this.mediaRenderer.renderMedia(mediaEl, embedContainer, parsedData, "");
+    }
+    embedContainer.removeAttribute("data-processing");
+  }
+  async updateExistingMedia(target) {
+    const container = target.closest("figure, span[class*='imagenote'], span[class*='video'], span[class*='audio'], div[class*='pdf'], .grid");
+    if (!container) return;
+    const altText = target.getAttribute("alt") || "";
+    const src = target.getAttribute("src") || "";
+    const filename = src.split("/").pop() || "";
+    const parsedData = this.mediaParser.parseAttributes(altText, filename);
+    const captionEl = container.querySelector(".figcaption, figcaption");
+    if (captionEl && parsedData.caption) {
+      const children = await this.mediaRenderer["renderMarkdown"](parsedData.caption, "");
+      this.mediaRenderer["updateCaption"](captionEl, children);
+    }
+  }
+  shouldProcessMedia(parsedData) {
+    return !!(parsedData.caption || parsedData.col || parsedData.width || parsedData["print-col"] || parsedData["print-width"] || parsedData["print-row"] || parsedData["print-height"] || parsedData["print-x"] || parsedData["print-y"] || parsedData["img-w"] || parsedData.type !== "figure");
+  }
+  extractWikilinks(source) {
+    const wikilinks = [];
+    const regex = /!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]*?))?\]\]/g;
+    let match;
+    while ((match = regex.exec(source)) !== null) {
+      wikilinks.push(match[0]);
+    }
+    return wikilinks;
+  }
+  async processGridImage(imageSyntax, container, sourcePath) {
+    const match = imageSyntax.match(/!\[\[\s*([^|\]]+?)\s*(?:\|([\s\S]+?))?\]\]/);
+    if (!match) return;
+    const imagePath = match[1].trim();
+    const params = match[2] ? match[2].trim() : "";
+    const abstractFile = this.app.metadataCache.getFirstLinkpathDest(imagePath, sourcePath);
+    if (!abstractFile) {
+      console.warn(`File not found: ${imagePath}`);
+      return;
+    }
+    const resolvedPath = this.app.vault.getResourcePath(abstractFile);
+    const parsedData = this.mediaParser.parseAttributes(params, imagePath);
+    let mediaEl;
+    if (parsedData.type === "video") {
+      mediaEl = container.createEl("video");
+      mediaEl.setAttribute("controls", "");
+    } else if (parsedData.type === "audio") {
+      mediaEl = container.createEl("audio");
+      mediaEl.setAttribute("controls", "");
+    } else {
+      mediaEl = container.createEl("img");
+    }
+    mediaEl.setAttribute("src", resolvedPath);
+    if (parsedData.caption) {
+      mediaEl.setAttribute("alt", parsedData.caption);
+    }
+    await this.mediaRenderer.renderMedia(mediaEl, container, parsedData, sourcePath);
+  }
+  mediaProcessor() {
+    return (el, ctx) => {
+      el.findAll("img:not(.emoji), video, audio").forEach(async (mediaEl) => {
+        const altText = mediaEl.getAttribute("alt") || "";
+        const src = mediaEl.getAttribute("src") || "";
+        const filename = src.split("/").pop() || "";
+        const parsedData = this.mediaParser.parseAttributes(altText, filename);
+        const parent = mediaEl.parentElement;
+        if (parent && !this.isAlreadyProcessed(mediaEl) && this.shouldProcessMedia(parsedData)) {
+          await this.mediaRenderer.renderMedia(mediaEl, parent, parsedData, ctx.sourcePath);
+        }
+      });
+      setTimeout(() => {
+        el.findAll(".internal-embed").forEach((embedContainer) => {
+          this.processEmbedContainer(embedContainer);
+        });
+      }, 100);
+    };
+  }
+  isAlreadyProcessed(mediaEl) {
+    var _a;
+    const container = mediaEl.closest("figure, span[class*='imagenote'], span[class*='video'], span[class*='audio'], div[class*='pdf']");
+    if (container && (container.classList.contains("grid") || container.classList.contains("figure") || container.classList.contains("imagenote") || container.classList.contains("video") || container.classList.contains("audio") || container.classList.contains("pdf"))) {
+      return true;
+    }
+    return !!((_a = mediaEl.parentElement) == null ? void 0 : _a.querySelector(".figcaption, figcaption"));
+  }
+  addEditOnClickToGrids() {
+    document.addEventListener("click", (event) => {
+      const target = event.target;
+      const gridContainer = target.closest(".columnGrid");
+      if (gridContainer) {
+        const editButton = this.findEditButton(gridContainer);
+        if (editButton) {
+          editButton.click();
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }
+    });
+  }
+  findEditButton(container) {
+    let parent = container.parentElement;
+    while (parent) {
+      const editButton = parent.querySelector(".edit-block-button");
+      if (editButton) return editButton;
+      parent = parent.parentElement;
+    }
+    return null;
+  }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
   async saveSettings() {
     await this.saveData(this.settings);
+    this.typeDetector = new TypeDetector(this.settings.mediaTypes);
+    this.mediaParser = new MediaParser(this.typeDetector);
+    this.mediaRenderer = new MediaRenderer(this.templateEngine, this.settings.mediaTypes, this);
   }
   onunload() {
-    this.observer.disconnect();
+    var _a;
+    (_a = this.observer) == null ? void 0 : _a.disconnect();
   }
 };
