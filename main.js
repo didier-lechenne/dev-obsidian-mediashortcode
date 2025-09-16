@@ -147,6 +147,11 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       col: void 0,
       "print-col": void 0,
       "print-width": void 0,
+      "print-row": void 0,
+      "print-height": void 0,
+      "print-x": void 0,
+      "print-y": void 0,
+      "img-w": void 0,
       dataNom: "image"
     };
     if (!altText) return result;
@@ -170,10 +175,32 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
             result.col = value;
             break;
           case "print-col":
+          case "printcol":
             result["print-col"] = value;
             break;
           case "print-width":
+          case "printwidth":
             result["print-width"] = value;
+            break;
+          case "print-row":
+          case "printrow":
+            result["print-row"] = value;
+            break;
+          case "print-height":
+          case "printheight":
+            result["print-height"] = value;
+            break;
+          case "img-x":
+          case "imgx":
+            result["print-x"] = value;
+            break;
+          case "img-y":
+          case "imgy":
+            result["print-y"] = value;
+            break;
+          case "img-w":
+          case "imgw":
+            result["img-w"] = value;
             break;
           case "type":
           case "datanom":
@@ -198,11 +225,36 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     if (parsedData.class && parsedData.class.length > 0) {
       parsedData.class.forEach((cls) => container.addClass(cls));
     }
+    const styles = [];
     if (parsedData.width) {
-      container.setAttribute("style", `--width: ${parsedData.width}`);
+      styles.push(`--width: ${parsedData.width}`);
     }
     if (parsedData.col) {
-      container.setAttribute("style", `--col: ${parsedData.col}`);
+      styles.push(`--col: ${parsedData.col}`);
+    }
+    if (parsedData["print-col"]) {
+      styles.push(`--print-col: ${parsedData["print-col"]}`);
+    }
+    if (parsedData["print-width"]) {
+      styles.push(`--print-width: ${parsedData["print-width"]}`);
+    }
+    if (parsedData["print-row"]) {
+      styles.push(`--print-row: ${parsedData["print-row"]}`);
+    }
+    if (parsedData["print-height"]) {
+      styles.push(`--print-height: ${parsedData["print-height"]}`);
+    }
+    if (parsedData["print-x"]) {
+      styles.push(`--print-x: ${parsedData["print-x"]}`);
+    }
+    if (parsedData["print-y"]) {
+      styles.push(`--print-y: ${parsedData["print-y"]}`);
+    }
+    if (parsedData["img-w"]) {
+      styles.push(`--img-w: ${parsedData["img-w"]}`);
+    }
+    if (styles.length > 0) {
+      container.setAttribute("style", styles.join("; "));
     }
     container.appendChild(imageEl);
     if (parsedData.caption) {

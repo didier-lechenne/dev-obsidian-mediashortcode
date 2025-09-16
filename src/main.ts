@@ -115,6 +115,11 @@ export default class ImageCaptions extends Plugin {
       col: undefined as string | undefined,
       "print-col": undefined as string | undefined,
       "print-width": undefined as string | undefined,
+      "print-row": undefined as string | undefined,
+      "print-height": undefined as string | undefined,
+      "print-x": undefined as string | undefined,
+      "print-y": undefined as string | undefined,
+      "img-w": undefined as string | undefined,
       dataNom: "image" as string,
     };
 
@@ -142,10 +147,32 @@ export default class ImageCaptions extends Plugin {
             result.col = value;
             break;
           case "print-col":
+          case "printcol":
             result["print-col"] = value;
             break;
           case "print-width":
+          case "printwidth":
             result["print-width"] = value;
+            break;
+          case "print-row":
+          case "printrow":
+            result["print-row"] = value;
+            break;
+          case "print-height":
+          case "printheight":
+            result["print-height"] = value;
+            break;
+          case "img-x":
+          case "imgx":
+            result["print-x"] = value;
+            break;
+          case "img-y":
+          case "imgy":
+            result["print-y"] = value;
+            break;
+          case "img-w":
+          case "imgw":
+            result["img-w"] = value;
             break;
           case "type":
           case "datanom":
@@ -181,12 +208,48 @@ export default class ImageCaptions extends Plugin {
       parsedData.class.forEach((cls: string) => container.addClass(cls));
     }
 
+    // Construction des styles CSS
+    const styles: string[] = [];
+    
     if (parsedData.width) {
-      container.setAttribute("style", `--width: ${parsedData.width}`);
+      styles.push(`--width: ${parsedData.width}`);
+    }
+    
+    if (parsedData.col) {
+      styles.push(`--col: ${parsedData.col}`);
+    }
+    
+    if (parsedData["print-col"]) {
+      styles.push(`--print-col: ${parsedData["print-col"]}`);
+    }
+    
+    if (parsedData["print-width"]) {
+      styles.push(`--print-width: ${parsedData["print-width"]}`);
+    }
+    
+    if (parsedData["print-row"]) {
+      styles.push(`--print-row: ${parsedData["print-row"]}`);
+    }
+    
+    if (parsedData["print-height"]) {
+      styles.push(`--print-height: ${parsedData["print-height"]}`);
+    }
+    
+    if (parsedData["print-x"]) {
+      styles.push(`--print-x: ${parsedData["print-x"]}`);
+    }
+    
+    if (parsedData["print-y"]) {
+      styles.push(`--print-y: ${parsedData["print-y"]}`);
+    }
+    
+    if (parsedData["img-w"]) {
+      styles.push(`--img-w: ${parsedData["img-w"]}`);
     }
 
-    if (parsedData.col) {
-      container.setAttribute("style", `--col: ${parsedData.col}`);
+    // Application des styles si il y en a
+    if (styles.length > 0) {
+      container.setAttribute("style", styles.join("; "));
     }
 
     container.appendChild(imageEl);
