@@ -57,27 +57,26 @@ export default class ImageCaptions extends Plugin {
         const altText = embedContainer.getAttribute("alt") || "";
         const parsedAlt = this.parseAltAttributes(altText);
 
-        // Force la re-application après validation
         setTimeout(async () => {
           const figure = embedContainer.querySelector("figure");
-          const figCaption = embedContainer.querySelector("figcaption");
+          const span = embedContainer.querySelector("span[class*='imagenote'], span[class*='video']");
+          const figCaption = embedContainer.querySelector("figcaption, .caption");
 
-          if (figure || img.parentElement?.nodeName === "FIGURE") {
-            const targetFigure = figure || img.parentElement;
+          if (figure || span || img.parentElement?.nodeName === "FIGURE") {
+            const targetContainer = span || figure || img.parentElement;
             
             if (figCaption && parsedAlt.caption) {
               const children = await this.renderMarkdown(parsedAlt.caption, "");
-              this.updateFigcaption(figCaption, children);
+              this.updateCaption(figCaption, children);
             }
             
-            // Re-application des styles
-            if (targetFigure) {
-              this.updateFigureStyles(targetFigure as HTMLElement, parsedAlt);
+            if (targetContainer) {
+              this.updateContainerStyles(targetContainer as HTMLElement, parsedAlt);
             }
           } else if (parsedAlt.caption || parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some(k => k.startsWith('print-') || k === 'img-w')) {
-            await this.insertFigureWithCaption(img as HTMLElement, embedContainer, parsedAlt, "");
+            await this.insertMediaWithCaption(img as HTMLElement, embedContainer, parsedAlt, "");
           }
-        }, 50); // Délai plus long pour laisser Obsidian finir son rendu
+        }, 50);
       });
   }
 
@@ -90,16 +89,15 @@ export default class ImageCaptions extends Plugin {
       const img = target.querySelector("img, video");
 
       if (img) {
-        const parentFigure = img.closest("figure");
-        if (parentFigure) {
-          // Mise à jour des classes
+        const parentContainer = img.closest("figure, span[class*='imagenote'], span[class*='video']");
+        if (parentContainer) {
           if (parsedAlt.class && parsedAlt.class.length > 0) {
-            parentFigure.classList.value = "figure";
-            parsedAlt.class.forEach((cls: string) => parentFigure.classList.add(cls));
+            const baseClass = parsedAlt.dataNom || "figure";
+            parentContainer.classList.value = baseClass;
+            parsedAlt.class.forEach((cls: string) => parentContainer.classList.add(cls));
           }
           
-          // Mise à jour des styles
-          this.updateFigureStyles(parentFigure, parsedAlt);
+          this.updateContainerStyles(parentContainer as HTMLElement, parsedAlt);
         }
       }
     }
@@ -107,18 +105,16 @@ export default class ImageCaptions extends Plugin {
     if ((target.tagName === "IMG" || target.tagName === "VIDEO") && (rec.attributeName === "alt" || rec.attributeName === "src")) {
       setTimeout(async () => {
         const parent = target.parentElement;
-        if (parent && parent.nodeName === "FIGURE") {
-          const figCaption = parent.querySelector("figcaption");
+        if (parent && (parent.nodeName === "FIGURE" || parent.classList.contains("imagenote") || parent.classList.contains("video"))) {
+          const caption = parent.querySelector("figcaption, .caption");
           const parsedData = this.parseAltAttributes(target.getAttribute("alt") || "");
           
-          // Mise à jour de la légende
-          if (figCaption && parsedData.caption) {
+          if (caption && parsedData.caption) {
             const children = await this.renderMarkdown(parsedData.caption, "");
-            this.updateFigcaption(figCaption, children);
+            this.updateCaption(caption, children);
           }
           
-          // Mise à jour des styles
-          this.updateFigureStyles(parent, parsedData);
+          this.updateContainerStyles(parent as HTMLElement, parsedData);
         }
       }, 10);
     }
@@ -137,7 +133,7 @@ export default class ImageCaptions extends Plugin {
       "print-x": undefined as string | undefined,
       "print-y": undefined as string | undefined,
       "img-w": undefined as string | undefined,
-      dataNom: "image" as string,
+      dataNom: "figure" as string,
     };
 
     if (!altText) return result;
@@ -204,8 +200,7 @@ export default class ImageCaptions extends Plugin {
     return result;
   }
 
-  // Méthode utilitaire pour mettre à jour les styles d'une figure
-  private updateFigureStyles(figure: HTMLElement, parsedData: any) {
+  private updateContainerStyles(container: HTMLElement, parsedData: any) {
     const styles: string[] = [];
     
     if (parsedData.width) {
@@ -244,16 +239,14 @@ export default class ImageCaptions extends Plugin {
       styles.push(`--img-w: ${parsedData["img-w"]}`);
     }
 
-    // Application des styles
     if (styles.length > 0) {
-      figure.setAttribute("style", styles.join("; "));
+      container.setAttribute("style", styles.join("; "));
     } else {
-      // Supprimer l'attribut style s'il n'y a plus de styles
-      figure.removeAttribute("style");
+      container.removeAttribute("style");
     }
   }
 
-  async insertFigureWithCaption(
+  async insertMediaWithCaption(
     imageEl: HTMLElement,
     outerEl: HTMLElement | Element,
     parsedData: any,
@@ -267,22 +260,46 @@ export default class ImageCaptions extends Plugin {
       imageEl.removeAttribute("alt");
     }
 
-    container = outerEl.createEl("figure");
-    container.addClass("figure");
+    // Choisir la structure selon le type
+    if (parsedData.dataNom === "imagenote" || parsedData.dataNom === "video") {
+      // Structure span pour imagenote/video
+      container = outerEl.createEl("span");
+      container.addClass(parsedData.dataNom);
+      
+      // Générer un ID basé sur le src de l'image
+      const imgSrc = imageEl.getAttribute("src") || "";
+      if (imgSrc) {
+        const filename = imgSrc.split("/").pop()?.replace(/\./g, "") || "";
+        const id = `content${filename}`;
+        container.setAttribute("id", id);
+        container.setAttribute("data-src", imgSrc);
+      }
+    } else {
+      // Structure figure par défaut
+      container = outerEl.createEl("figure");
+      container.addClass("figure");
+    }
 
+    // Ajouter les classes supplémentaires
     if (parsedData.class && parsedData.class.length > 0) {
       parsedData.class.forEach((cls: string) => container.addClass(cls));
     }
 
-    // Utilisation de la méthode utilitaire pour les styles
-    this.updateFigureStyles(container, parsedData);
-
+    this.updateContainerStyles(container, parsedData);
     container.appendChild(imageEl);
 
+    // Ajouter la légende
     if (parsedData.caption) {
-      const figcaption = container.createEl("figcaption", { cls: "figcaption" });
+      let captionEl: HTMLElement;
+      
+      if (parsedData.dataNom === "imagenote" || parsedData.dataNom === "video") {
+        captionEl = container.createEl("span", { cls: "caption" });
+      } else {
+        captionEl = container.createEl("figcaption", { cls: "figcaption" });
+      }
+      
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      this.updateFigcaption(figcaption, children);
+      this.updateCaption(captionEl, children);
     }
   }
 
@@ -353,7 +370,7 @@ export default class ImageCaptions extends Plugin {
     img.setAttribute("alt", params);
 
     const parsedData = this.parseAltAttributes(params);
-    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
+    await this.insertMediaWithCaption(img, container, parsedData, sourcePath);
   }
 
   private addEditOnClickToGrids() {
@@ -383,18 +400,16 @@ export default class ImageCaptions extends Plugin {
 
   externalImageProcessor(): MarkdownPostProcessor {
     return (el, ctx) => {
-      // Traiter les images normales
       el.findAll("img:not(.emoji), video").forEach(async (img) => {
         const altText = img.getAttribute("alt") || "";
         const parsedData = this.parseAltAttributes(altText);
         const parent = img.parentElement;
 
-        if (parent && parent.nodeName !== "FIGURE" && (parsedData.caption || parsedData.col || parsedData.width || Object.keys(parsedData).some(k => k.startsWith('print-') || k === 'img-w'))) {
-          await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath);
+        if (parent && parent.nodeName !== "FIGURE" && !parent.classList.contains("imagenote") && !parent.classList.contains("video") && (parsedData.caption || parsedData.col || parsedData.width || Object.keys(parsedData).some(k => k.startsWith('print-') || k === 'img-w'))) {
+          await this.insertMediaWithCaption(img, parent, parsedData, ctx.sourcePath);
         }
       });
 
-      // Traiter spécifiquement les internal-embed après rendu
       setTimeout(() => {
         el.findAll(".internal-embed").forEach(async (embedContainer) => {
           const img = embedContainer.querySelector("img, video");
@@ -403,9 +418,9 @@ export default class ImageCaptions extends Plugin {
           const altText = embedContainer.getAttribute("alt") || "";
           const parsedAlt = this.parseAltAttributes(altText);
           
-          const existingFigure = img.closest("figure");
-          if (existingFigure && (parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some(k => k.startsWith('print-') || k === 'img-w'))) {
-            this.updateFigureStyles(existingFigure, parsedAlt);
+          const existingContainer = img.closest("figure, span[class*='imagenote'], span[class*='video']");
+          if (existingContainer && (parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some(k => k.startsWith('print-') || k === 'img-w'))) {
+            this.updateContainerStyles(existingContainer as HTMLElement, parsedAlt);
           }
         });
       }, 100);
@@ -424,12 +439,12 @@ export default class ImageCaptions extends Plugin {
     return nodes.length > 0 ? nodes : [document.createTextNode(markdown)];
   }
 
-  private updateFigcaption(figcaption: HTMLElement, children: Node[]) {
+  private updateCaption(captionEl: Element, children: Node[]) {
     if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
       const pElement = children[0] as HTMLParagraphElement;
-      figcaption.replaceChildren(...Array.from(pElement.childNodes));
+      captionEl.replaceChildren(...Array.from(pElement.childNodes));
     } else {
-      figcaption.replaceChildren(...children);
+      captionEl.replaceChildren(...children);
     }
   }
 

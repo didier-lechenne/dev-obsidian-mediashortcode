@@ -98,18 +98,19 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       setTimeout(async () => {
         var _a;
         const figure = embedContainer.querySelector("figure");
-        const figCaption = embedContainer.querySelector("figcaption");
-        if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
-          const targetFigure = figure || img.parentElement;
+        const span = embedContainer.querySelector("span[class*='imagenote'], span[class*='video']");
+        const figCaption = embedContainer.querySelector("figcaption, .caption");
+        if (figure || span || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
+          const targetContainer = span || figure || img.parentElement;
           if (figCaption && parsedAlt.caption) {
             const children = await this.renderMarkdown(parsedAlt.caption, "");
-            this.updateFigcaption(figCaption, children);
+            this.updateCaption(figCaption, children);
           }
-          if (targetFigure) {
-            this.updateFigureStyles(targetFigure, parsedAlt);
+          if (targetContainer) {
+            this.updateContainerStyles(targetContainer, parsedAlt);
           }
         } else if (parsedAlt.caption || parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some((k) => k.startsWith("print-") || k === "img-w")) {
-          await this.insertFigureWithCaption(img, embedContainer, parsedAlt, "");
+          await this.insertMediaWithCaption(img, embedContainer, parsedAlt, "");
         }
       }, 50);
     });
@@ -121,27 +122,28 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const parsedAlt = this.parseAltAttributes(altText);
       const img = target.querySelector("img, video");
       if (img) {
-        const parentFigure = img.closest("figure");
-        if (parentFigure) {
+        const parentContainer = img.closest("figure, span[class*='imagenote'], span[class*='video']");
+        if (parentContainer) {
           if (parsedAlt.class && parsedAlt.class.length > 0) {
-            parentFigure.classList.value = "figure";
-            parsedAlt.class.forEach((cls) => parentFigure.classList.add(cls));
+            const baseClass = parsedAlt.dataNom || "figure";
+            parentContainer.classList.value = baseClass;
+            parsedAlt.class.forEach((cls) => parentContainer.classList.add(cls));
           }
-          this.updateFigureStyles(parentFigure, parsedAlt);
+          this.updateContainerStyles(parentContainer, parsedAlt);
         }
       }
     }
     if ((target.tagName === "IMG" || target.tagName === "VIDEO") && (rec.attributeName === "alt" || rec.attributeName === "src")) {
       setTimeout(async () => {
         const parent = target.parentElement;
-        if (parent && parent.nodeName === "FIGURE") {
-          const figCaption = parent.querySelector("figcaption");
+        if (parent && (parent.nodeName === "FIGURE" || parent.classList.contains("imagenote") || parent.classList.contains("video"))) {
+          const caption = parent.querySelector("figcaption, .caption");
           const parsedData = this.parseAltAttributes(target.getAttribute("alt") || "");
-          if (figCaption && parsedData.caption) {
+          if (caption && parsedData.caption) {
             const children = await this.renderMarkdown(parsedData.caption, "");
-            this.updateFigcaption(figCaption, children);
+            this.updateCaption(caption, children);
           }
-          this.updateFigureStyles(parent, parsedData);
+          this.updateContainerStyles(parent, parsedData);
         }
       }, 10);
     }
@@ -159,7 +161,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       "print-x": void 0,
       "print-y": void 0,
       "img-w": void 0,
-      dataNom: "image"
+      dataNom: "figure"
     };
     if (!altText) return result;
     const cleanedAltText = altText.replace(/\s+/g, " ").trim();
@@ -220,8 +222,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     return result;
   }
-  // Méthode utilitaire pour mettre à jour les styles d'une figure
-  updateFigureStyles(figure, parsedData) {
+  updateContainerStyles(container, parsedData) {
     const styles = [];
     if (parsedData.width) {
       styles.push(`--width: ${parsedData.width}`);
@@ -251,29 +252,47 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       styles.push(`--img-w: ${parsedData["img-w"]}`);
     }
     if (styles.length > 0) {
-      figure.setAttribute("style", styles.join("; "));
+      container.setAttribute("style", styles.join("; "));
     } else {
-      figure.removeAttribute("style");
+      container.removeAttribute("style");
     }
   }
-  async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
+  async insertMediaWithCaption(imageEl, outerEl, parsedData, sourcePath) {
+    var _a;
     let container;
     if (parsedData.caption) {
       imageEl.setAttribute("alt", parsedData.caption);
     } else {
       imageEl.removeAttribute("alt");
     }
-    container = outerEl.createEl("figure");
-    container.addClass("figure");
+    if (parsedData.dataNom === "imagenote" || parsedData.dataNom === "video") {
+      container = outerEl.createEl("span");
+      container.addClass(parsedData.dataNom);
+      const imgSrc = imageEl.getAttribute("src") || "";
+      if (imgSrc) {
+        const filename = ((_a = imgSrc.split("/").pop()) == null ? void 0 : _a.replace(/\./g, "")) || "";
+        const id = `content${filename}`;
+        container.setAttribute("id", id);
+        container.setAttribute("data-src", imgSrc);
+      }
+    } else {
+      container = outerEl.createEl("figure");
+      container.addClass("figure");
+    }
     if (parsedData.class && parsedData.class.length > 0) {
       parsedData.class.forEach((cls) => container.addClass(cls));
     }
-    this.updateFigureStyles(container, parsedData);
+    this.updateContainerStyles(container, parsedData);
     container.appendChild(imageEl);
     if (parsedData.caption) {
-      const figcaption = container.createEl("figcaption", { cls: "figcaption" });
+      let captionEl;
+      if (parsedData.dataNom === "imagenote" || parsedData.dataNom === "video") {
+        captionEl = container.createEl("span", { cls: "caption" });
+      } else {
+        captionEl = container.createEl("figcaption", { cls: "figcaption" });
+      }
       const children = await this.renderMarkdown(parsedData.caption, sourcePath);
-      this.updateFigcaption(figcaption, children);
+      this.updateCaption(captionEl, children);
     }
   }
   extractWikilinks(source) {
@@ -321,7 +340,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     img.src = resolvedPath;
     img.setAttribute("alt", params);
     const parsedData = this.parseAltAttributes(params);
-    await this.insertFigureWithCaption(img, container, parsedData, sourcePath);
+    await this.insertMediaWithCaption(img, container, parsedData, sourcePath);
   }
   addEditOnClickToGrids() {
     document.addEventListener("click", (event) => {
@@ -351,8 +370,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         const altText = img.getAttribute("alt") || "";
         const parsedData = this.parseAltAttributes(altText);
         const parent = img.parentElement;
-        if (parent && parent.nodeName !== "FIGURE" && (parsedData.caption || parsedData.col || parsedData.width || Object.keys(parsedData).some((k) => k.startsWith("print-") || k === "img-w"))) {
-          await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath);
+        if (parent && parent.nodeName !== "FIGURE" && !parent.classList.contains("imagenote") && !parent.classList.contains("video") && (parsedData.caption || parsedData.col || parsedData.width || Object.keys(parsedData).some((k) => k.startsWith("print-") || k === "img-w"))) {
+          await this.insertMediaWithCaption(img, parent, parsedData, ctx.sourcePath);
         }
       });
       setTimeout(() => {
@@ -361,9 +380,9 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
           if (!img) return;
           const altText = embedContainer.getAttribute("alt") || "";
           const parsedAlt = this.parseAltAttributes(altText);
-          const existingFigure = img.closest("figure");
-          if (existingFigure && (parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some((k) => k.startsWith("print-") || k === "img-w"))) {
-            this.updateFigureStyles(existingFigure, parsedAlt);
+          const existingContainer = img.closest("figure, span[class*='imagenote'], span[class*='video']");
+          if (existingContainer && (parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some((k) => k.startsWith("print-") || k === "img-w"))) {
+            this.updateContainerStyles(existingContainer, parsedAlt);
           }
         });
       }, 100);
@@ -378,12 +397,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     return nodes.length > 0 ? nodes : [document.createTextNode(markdown)];
   }
-  updateFigcaption(figcaption, children) {
+  updateCaption(captionEl, children) {
     if (children.length === 1 && children[0] instanceof HTMLParagraphElement) {
       const pElement = children[0];
-      figcaption.replaceChildren(...Array.from(pElement.childNodes));
+      captionEl.replaceChildren(...Array.from(pElement.childNodes));
     } else {
-      figcaption.replaceChildren(...children);
+      captionEl.replaceChildren(...children);
     }
   }
   async loadSettings() {
