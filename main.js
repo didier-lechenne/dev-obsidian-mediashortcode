@@ -91,28 +91,27 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
   }
   processChildListChanges(rec) {
     rec.target.querySelectorAll(".image-embed, .video-embed, .internal-embed").forEach(async (embedContainer) => {
-      var _a;
       const img = embedContainer.querySelector("img, video");
       if (!img) return;
       const altText = embedContainer.getAttribute("alt") || "";
       const parsedAlt = this.parseAltAttributes(altText);
-      if (parsedAlt.caption) {
-        embedContainer.setAttribute("alt", parsedAlt.caption);
-      }
-      const figure = embedContainer.querySelector("figure");
-      const figCaption = embedContainer.querySelector("figcaption");
-      if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
-        const targetFigure = figure || img.parentElement;
-        if (figCaption && parsedAlt.caption) {
-          const children = await this.renderMarkdown(parsedAlt.caption, "");
-          this.updateFigcaption(figCaption, children);
+      setTimeout(async () => {
+        var _a;
+        const figure = embedContainer.querySelector("figure");
+        const figCaption = embedContainer.querySelector("figcaption");
+        if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
+          const targetFigure = figure || img.parentElement;
+          if (figCaption && parsedAlt.caption) {
+            const children = await this.renderMarkdown(parsedAlt.caption, "");
+            this.updateFigcaption(figCaption, children);
+          }
+          if (targetFigure) {
+            this.updateFigureStyles(targetFigure, parsedAlt);
+          }
+        } else if (parsedAlt.caption || parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some((k) => k.startsWith("print-") || k === "img-w")) {
+          await this.insertFigureWithCaption(img, embedContainer, parsedAlt, "");
         }
-        if (targetFigure) {
-          this.updateFigureStyles(targetFigure, parsedAlt);
-        }
-      } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
-        await this.insertFigureWithCaption(img, embedContainer, parsedAlt, "");
-      }
+      }, 50);
     });
   }
   processAttributeChanges(rec) {
@@ -352,10 +351,22 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
         const altText = img.getAttribute("alt") || "";
         const parsedData = this.parseAltAttributes(altText);
         const parent = img.parentElement;
-        if (parent && parent.nodeName !== "FIGURE" && parsedData.caption && parsedData.caption !== img.getAttribute("src")) {
+        if (parent && parent.nodeName !== "FIGURE" && (parsedData.caption || parsedData.col || parsedData.width || Object.keys(parsedData).some((k) => k.startsWith("print-") || k === "img-w"))) {
           await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath);
         }
       });
+      setTimeout(() => {
+        el.findAll(".internal-embed").forEach(async (embedContainer) => {
+          const img = embedContainer.querySelector("img, video");
+          if (!img) return;
+          const altText = embedContainer.getAttribute("alt") || "";
+          const parsedAlt = this.parseAltAttributes(altText);
+          const existingFigure = img.closest("figure");
+          if (existingFigure && (parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some((k) => k.startsWith("print-") || k === "img-w"))) {
+            this.updateFigureStyles(existingFigure, parsedAlt);
+          }
+        });
+      }, 100);
     };
   }
   async renderMarkdown(markdown, sourcePath) {

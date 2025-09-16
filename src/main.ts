@@ -57,28 +57,27 @@ export default class ImageCaptions extends Plugin {
         const altText = embedContainer.getAttribute("alt") || "";
         const parsedAlt = this.parseAltAttributes(altText);
 
-        if (parsedAlt.caption) {
-          embedContainer.setAttribute("alt", parsedAlt.caption);
-        }
+        // Force la re-application après validation
+        setTimeout(async () => {
+          const figure = embedContainer.querySelector("figure");
+          const figCaption = embedContainer.querySelector("figcaption");
 
-        const figure = embedContainer.querySelector("figure");
-        const figCaption = embedContainer.querySelector("figcaption");
-
-        if (figure || img.parentElement?.nodeName === "FIGURE") {
-          const targetFigure = figure || img.parentElement;
-          
-          if (figCaption && parsedAlt.caption) {
-            const children = await this.renderMarkdown(parsedAlt.caption, "");
-            this.updateFigcaption(figCaption, children);
+          if (figure || img.parentElement?.nodeName === "FIGURE") {
+            const targetFigure = figure || img.parentElement;
+            
+            if (figCaption && parsedAlt.caption) {
+              const children = await this.renderMarkdown(parsedAlt.caption, "");
+              this.updateFigcaption(figCaption, children);
+            }
+            
+            // Re-application des styles
+            if (targetFigure) {
+              this.updateFigureStyles(targetFigure as HTMLElement, parsedAlt);
+            }
+          } else if (parsedAlt.caption || parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some(k => k.startsWith('print-') || k === 'img-w')) {
+            await this.insertFigureWithCaption(img as HTMLElement, embedContainer, parsedAlt, "");
           }
-          
-          // Mise à jour des styles pour la figure existante
-          if (targetFigure) {
-            this.updateFigureStyles(targetFigure as HTMLElement, parsedAlt);
-          }
-        } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
-          await this.insertFigureWithCaption(img as HTMLElement, embedContainer, parsedAlt, "");
-        }
+        }, 50); // Délai plus long pour laisser Obsidian finir son rendu
       });
   }
 
@@ -384,15 +383,32 @@ export default class ImageCaptions extends Plugin {
 
   externalImageProcessor(): MarkdownPostProcessor {
     return (el, ctx) => {
+      // Traiter les images normales
       el.findAll("img:not(.emoji), video").forEach(async (img) => {
         const altText = img.getAttribute("alt") || "";
         const parsedData = this.parseAltAttributes(altText);
         const parent = img.parentElement;
 
-        if (parent && parent.nodeName !== "FIGURE" && parsedData.caption && parsedData.caption !== img.getAttribute("src")) {
+        if (parent && parent.nodeName !== "FIGURE" && (parsedData.caption || parsedData.col || parsedData.width || Object.keys(parsedData).some(k => k.startsWith('print-') || k === 'img-w'))) {
           await this.insertFigureWithCaption(img, parent, parsedData, ctx.sourcePath);
         }
       });
+
+      // Traiter spécifiquement les internal-embed après rendu
+      setTimeout(() => {
+        el.findAll(".internal-embed").forEach(async (embedContainer) => {
+          const img = embedContainer.querySelector("img, video");
+          if (!img) return;
+
+          const altText = embedContainer.getAttribute("alt") || "";
+          const parsedAlt = this.parseAltAttributes(altText);
+          
+          const existingFigure = img.closest("figure");
+          if (existingFigure && (parsedAlt.col || parsedAlt.width || Object.keys(parsedAlt).some(k => k.startsWith('print-') || k === 'img-w'))) {
+            this.updateFigureStyles(existingFigure, parsedAlt);
+          }
+        });
+      }, 100);
     };
   }
 
