@@ -86,7 +86,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["alt", "src"]
+      attributeFilter: ["alt", "src", "data-path"]
     });
   }
   processChildListChanges(rec) {
@@ -102,9 +102,13 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const figure = embedContainer.querySelector("figure");
       const figCaption = embedContainer.querySelector("figcaption");
       if (figure || ((_a = img.parentElement) == null ? void 0 : _a.nodeName) === "FIGURE") {
+        const targetFigure = figure || img.parentElement;
         if (figCaption && parsedAlt.caption) {
           const children = await this.renderMarkdown(parsedAlt.caption, "");
           this.updateFigcaption(figCaption, children);
+        }
+        if (targetFigure) {
+          this.updateFigureStyles(targetFigure, parsedAlt);
         }
       } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
         await this.insertFigureWithCaption(img, embedContainer, parsedAlt, "");
@@ -119,9 +123,12 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       const img = target.querySelector("img, video");
       if (img) {
         const parentFigure = img.closest("figure");
-        if (parentFigure && parsedAlt.class && parsedAlt.class.length > 0) {
-          parentFigure.classList.value = "figure";
-          parsedAlt.class.forEach((cls) => parentFigure.classList.add(cls));
+        if (parentFigure) {
+          if (parsedAlt.class && parsedAlt.class.length > 0) {
+            parentFigure.classList.value = "figure";
+            parsedAlt.class.forEach((cls) => parentFigure.classList.add(cls));
+          }
+          this.updateFigureStyles(parentFigure, parsedAlt);
         }
       }
     }
@@ -135,6 +142,7 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
             const children = await this.renderMarkdown(parsedData.caption, "");
             this.updateFigcaption(figCaption, children);
           }
+          this.updateFigureStyles(parent, parsedData);
         }
       }, 10);
     }
@@ -213,18 +221,8 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
     }
     return result;
   }
-  async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
-    let container;
-    if (parsedData.caption) {
-      imageEl.setAttribute("alt", parsedData.caption);
-    } else {
-      imageEl.removeAttribute("alt");
-    }
-    container = outerEl.createEl("figure");
-    container.addClass("figure");
-    if (parsedData.class && parsedData.class.length > 0) {
-      parsedData.class.forEach((cls) => container.addClass(cls));
-    }
+  // Méthode utilitaire pour mettre à jour les styles d'une figure
+  updateFigureStyles(figure, parsedData) {
     const styles = [];
     if (parsedData.width) {
       styles.push(`--width: ${parsedData.width}`);
@@ -254,8 +252,24 @@ var ImageCaptions = class extends import_obsidian2.Plugin {
       styles.push(`--img-w: ${parsedData["img-w"]}`);
     }
     if (styles.length > 0) {
-      container.setAttribute("style", styles.join("; "));
+      figure.setAttribute("style", styles.join("; "));
+    } else {
+      figure.removeAttribute("style");
     }
+  }
+  async insertFigureWithCaption(imageEl, outerEl, parsedData, sourcePath) {
+    let container;
+    if (parsedData.caption) {
+      imageEl.setAttribute("alt", parsedData.caption);
+    } else {
+      imageEl.removeAttribute("alt");
+    }
+    container = outerEl.createEl("figure");
+    container.addClass("figure");
+    if (parsedData.class && parsedData.class.length > 0) {
+      parsedData.class.forEach((cls) => container.addClass(cls));
+    }
+    this.updateFigureStyles(container, parsedData);
     container.appendChild(imageEl);
     if (parsedData.caption) {
       const figcaption = container.createEl("figcaption", { cls: "figcaption" });

@@ -43,7 +43,7 @@ export default class ImageCaptions extends Plugin {
       subtree: true,
       childList: true,
       attributes: true,
-      attributeFilter: ["alt", "src"],
+      attributeFilter: ["alt", "src", "data-path"],
     });
   }
 
@@ -65,9 +65,16 @@ export default class ImageCaptions extends Plugin {
         const figCaption = embedContainer.querySelector("figcaption");
 
         if (figure || img.parentElement?.nodeName === "FIGURE") {
+          const targetFigure = figure || img.parentElement;
+          
           if (figCaption && parsedAlt.caption) {
             const children = await this.renderMarkdown(parsedAlt.caption, "");
             this.updateFigcaption(figCaption, children);
+          }
+          
+          // Mise à jour des styles pour la figure existante
+          if (targetFigure) {
+            this.updateFigureStyles(targetFigure as HTMLElement, parsedAlt);
           }
         } else if (parsedAlt.caption && parsedAlt.caption !== embedContainer.getAttribute("src")) {
           await this.insertFigureWithCaption(img as HTMLElement, embedContainer, parsedAlt, "");
@@ -85,9 +92,15 @@ export default class ImageCaptions extends Plugin {
 
       if (img) {
         const parentFigure = img.closest("figure");
-        if (parentFigure && parsedAlt.class && parsedAlt.class.length > 0) {
-          parentFigure.classList.value = "figure";
-          parsedAlt.class.forEach((cls: string) => parentFigure.classList.add(cls));
+        if (parentFigure) {
+          // Mise à jour des classes
+          if (parsedAlt.class && parsedAlt.class.length > 0) {
+            parentFigure.classList.value = "figure";
+            parsedAlt.class.forEach((cls: string) => parentFigure.classList.add(cls));
+          }
+          
+          // Mise à jour des styles
+          this.updateFigureStyles(parentFigure, parsedAlt);
         }
       }
     }
@@ -98,10 +111,15 @@ export default class ImageCaptions extends Plugin {
         if (parent && parent.nodeName === "FIGURE") {
           const figCaption = parent.querySelector("figcaption");
           const parsedData = this.parseAltAttributes(target.getAttribute("alt") || "");
+          
+          // Mise à jour de la légende
           if (figCaption && parsedData.caption) {
             const children = await this.renderMarkdown(parsedData.caption, "");
             this.updateFigcaption(figCaption, children);
           }
+          
+          // Mise à jour des styles
+          this.updateFigureStyles(parent, parsedData);
         }
       }, 10);
     }
@@ -187,28 +205,8 @@ export default class ImageCaptions extends Plugin {
     return result;
   }
 
-  async insertFigureWithCaption(
-    imageEl: HTMLElement,
-    outerEl: HTMLElement | Element,
-    parsedData: any,
-    sourcePath: string
-  ) {
-    let container: HTMLElement;
-
-    if (parsedData.caption) {
-      imageEl.setAttribute("alt", parsedData.caption);
-    } else {
-      imageEl.removeAttribute("alt");
-    }
-
-    container = outerEl.createEl("figure");
-    container.addClass("figure");
-
-    if (parsedData.class && parsedData.class.length > 0) {
-      parsedData.class.forEach((cls: string) => container.addClass(cls));
-    }
-
-    // Construction des styles CSS
+  // Méthode utilitaire pour mettre à jour les styles d'une figure
+  private updateFigureStyles(figure: HTMLElement, parsedData: any) {
     const styles: string[] = [];
     
     if (parsedData.width) {
@@ -247,10 +245,38 @@ export default class ImageCaptions extends Plugin {
       styles.push(`--img-w: ${parsedData["img-w"]}`);
     }
 
-    // Application des styles si il y en a
+    // Application des styles
     if (styles.length > 0) {
-      container.setAttribute("style", styles.join("; "));
+      figure.setAttribute("style", styles.join("; "));
+    } else {
+      // Supprimer l'attribut style s'il n'y a plus de styles
+      figure.removeAttribute("style");
     }
+  }
+
+  async insertFigureWithCaption(
+    imageEl: HTMLElement,
+    outerEl: HTMLElement | Element,
+    parsedData: any,
+    sourcePath: string
+  ) {
+    let container: HTMLElement;
+
+    if (parsedData.caption) {
+      imageEl.setAttribute("alt", parsedData.caption);
+    } else {
+      imageEl.removeAttribute("alt");
+    }
+
+    container = outerEl.createEl("figure");
+    container.addClass("figure");
+
+    if (parsedData.class && parsedData.class.length > 0) {
+      parsedData.class.forEach((cls: string) => container.addClass(cls));
+    }
+
+    // Utilisation de la méthode utilitaire pour les styles
+    this.updateFigureStyles(container, parsedData);
 
     container.appendChild(imageEl);
 
